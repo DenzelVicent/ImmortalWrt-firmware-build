@@ -1,12 +1,13 @@
 # ImmortalWrt 固件云编译
 
-> 本项目通过 GitHub Actions 云编译多平台路由器固件，各分支独立维护不同设备的编译配置。
+## 项目概述
+
+本项目通过 GitHub Actions 云编译多平台路由器/光猫固件，基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) 及其衍生源码。仓库按设备平台划分为独立分支，各分支自行维护编译配置、自定义脚本和工作流，互不干扰。
 
 ## 分支说明
 
 | 分支 | 平台 | 源码 | 支持设备 |
 |---|---|---|---|
-| **master** | — | — | 本仓库默认分支，仅存放项目说明，不包含编译配置 |
 | **MT7981-hanwckf** | MediaTek MT7981 | [hanwckf/immortalwrt-mt798x](https://github.com/hanwckf/immortalwrt-mt798x) | 小米 AX3000T、CMCC RAX3000M |
 | **AN7581** | Airoha AN7581 | [pbs05/ponwrt](https://github.com/pbs05/ponwrt) | Nokia XG-040G-MD 等 PON 光猫 |
 
