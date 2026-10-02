@@ -45,7 +45,7 @@ jobs:
     # ----------------------------------------------------------
     strategy:
       matrix:
-        board: [ax3000t, ax3000t_an8855, rax3000m, rax3000m-emmc] 
+        board: [ax3000t, ax3000t_an8855, cmcc_rax3000m, cmcc_rax3000m-emmc]
 
     steps:
 
