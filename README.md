@@ -1,8 +1,8 @@
 # PonWrt 固件云编译 (Airoha AN7581)
 
-本分支用于云编译 [PonWrt](https://github.com/pbs05/ponwrt) 固件，目标设备为 Nokia XG-040G-MD (Airoha AN7581 平台)。
+> 源码：[PonWrt](https://github.com/pbs05/ponwrt) | 基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt)
 
-PonWrt 基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt)，增加了对 Airoha AN7581 和 AN7583 PON 设备的支持。
+本仓库用于云编译 PonWrt 固件，目标设备为 Nokia XG-040G-MD (Airoha AN7581 平台)。
 
 ## 免责声明
 
