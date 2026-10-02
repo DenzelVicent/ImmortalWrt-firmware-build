@@ -18,13 +18,11 @@ env:
   REPO_URL: https://github.com/pbs05/ponwrt.git
   # 源码分支
   REPO_BRANCH: master
-  # 设备配置文件 (configs/ 目录下，不含 .config 后缀)
-  DEVICE_CONFIG: nokia-xg-040g-md
-  # 公共发布配置 (与设备配置合并，同名项以此文件为准)
-  RELEASE_CONFIG: release
-  # feeds 更新前执行的自定义脚本
+  # 自定义固件配置文件 (OpenWrt make menuconfig 生成的 .config)
+  CONFIG_FILE: .config
+  # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
-  # feeds 更新后执行的自定义脚本
+  # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
   SELF_AFTER_SH: after-update-custom.sh
   # 编译环境时区
   TZ: Asia/Shanghai
@@ -110,9 +108,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openwrt/dl
-        key: ponwrt-dl-${{ env.DEVICE_CONFIG }}-${{ hashFiles('feeds.conf.default', 'configs/*.config') }}
+        key: ponwrt-dl-${{ hashFiles('feeds.conf.default', '.config') }}
         restore-keys: |
-          ponwrt-dl-${{ env.DEVICE_CONFIG }}-
+          ponwrt-dl-
 
     # ----------------------------------------------------------
     # 步骤 6: 加载自定义 feeds 源
@@ -158,20 +156,19 @@ jobs:
         fi
 
     # ----------------------------------------------------------
-    # 步骤 10: 合并配置并加载自定义脚本
-    # 使用 kconfig.pl 将设备配置与发布配置合并生成 .config
-    # 同名配置项以 release.config 为准
-    # 执行 after-update-custom.sh (可修改默认 IP、DHCP 等)
+    # 步骤 10: 加载自定义配置
+    # 将 .config 复制为 openwrt/.config 作为编译配置
+    # 如果存在 files/ 目录则复制到 openwrt/files/ 作为固件内预置文件
+    # make defconfig 根据 .config 生成完整配置
+    # 最后执行 after-update-custom.sh (修改默认 IP、DHCP 范围等)
     # ----------------------------------------------------------
     - name: Load custom config
       run: |
         [ -e files ] && mv files openwrt/files
-        cp configs/${DEVICE_CONFIG}.config openwrt/device.config
-        cp configs/${RELEASE_CONFIG}.config openwrt/release.config
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $SELF_AFTER_SH
         cd openwrt
-        ./scripts/kconfig.pl + device.config release.config > .config
         make defconfig
-        chmod +x $GITHUB_WORKSPACE/$SELF_AFTER_SH
         $GITHUB_WORKSPACE/$SELF_AFTER_SH
 
     # ----------------------------------------------------------
@@ -199,7 +196,7 @@ jobs:
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
-        echo "DEVICE_NAME=_${{ env.DEVICE_CONFIG }}" >> $GITHUB_ENV
+        echo "DEVICE_NAME=_nokia-xg-040g-md" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
     # ----------------------------------------------------------

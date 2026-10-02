@@ -96,9 +96,8 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 ├── .github/workflows/
 │   └── build-ponwrt.yml        # GitHub Actions 编译工作流
 ├── configs/
-│   ├── an7581.config           # AN7581 平台完整配置 (本地编译用)
-│   ├── nokia-xg-040g-md.config # Nokia XG-040G-MD 设备专用配置 (云编译用)
-│   └── release.config          # 公共发布配置 (与设备配置合并)
+│   └── an7581.config           # AN7581 平台完整配置 (本地编译参考)
+├── .config                     # 设备专用编译配置 (云编译用)
 ├── before-update-custom.sh     # feeds 更新前执行的自定义脚本
 ├── after-update-custom.sh      # feeds 更新后执行的自定义脚本
 └── feeds.conf.default          # 自定义 feeds 源配置
@@ -151,22 +150,9 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 - **手动触发**: GitHub Actions 页面点击 "Run workflow"
 - **定时编译**: 编辑 workflow 文件取消 `schedule` 注释 (UTC 时间)
 
-### 配置合并规则
-
-云编译使用 `kconfig.pl +` 合并两个配置文件：
-
-```
-kconfig.pl + configs/nokia-xg-040g-md.config configs/release.config > .config
-```
-
-- `nokia-xg-040g-md.config` — 设备级配置：目标平台、软件包选择、内核模块
-- `release.config` — 公共配置：通用网络加速模块 (WireGuard、BBR、CAKE 等)
-- **同名配置项以 `release.config` 为准**
-
 ### 自定义配置
 
-- 修改 `configs/nokia-xg-040g-md.config` 调整软件包和内核模块
-- 修改 `configs/release.config` 调整公共配置项
+- 修改 `.config` 调整软件包和内核模块
 - 修改 `after-update-custom.sh` 自定义默认 IP、DHCP 等
 - 修改 `.github/workflows/build-ponwrt.yml` 的 `env` 段切换设备或源码分支
 
