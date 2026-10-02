@@ -1,16 +1,31 @@
+# ============================================================
+# ImmortalWrt 固件编译工作流
+# 支持机型: 小米 AX3000T / CMCC RAX3000M (MT7981 平台)
+# 触发方式: 手动触发 (workflow_dispatch)
+# ============================================================
+
 name: Build ImmortalWrt Firmware
 on:
+  # 定时编译 (默认关闭，取消注释即可启用，cron 使用 UTC 时间)
   # schedule:
   #   - cron: "0 0 20 * *"
+  # 手动触发：可在 GitHub Actions 页面点击 "Run workflow" 按钮
   workflow_dispatch:
 
 env:
+  # 源码仓库地址 (hanwckf 的 MT798x ImmortalWrt 分支)
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
+  # 源码分支 (openwrt-21.02 基于 OpenWrt 21.02)
   REPO_BRANCH: openwrt-21.02
+  # 自定义固件配置文件 (OpenWrt make menuconfig 生成的 .config)
   CONFIG_FILE: .config
+  # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
+  # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
   SELF_AFTER_SH: after-update-custom.sh
+  # 编译环境时区
   TZ: Asia/Shanghai
+  # 自定义 feeds 配置文件 (如存在则覆盖默认 feeds 源)
   FEEDS_CONF: feeds.conf.default
 
 jobs:
@@ -19,41 +34,54 @@ jobs:
     runs-on: ubuntu-22.04
 
     permissions:
-      contents: write
-      actions: write
-    
+      contents: write   # 允许创建 Release
+      actions: write    # 允许删除/管理 workflow runs
+
     steps:
+    # ----------------------------------------------------------
+    # 步骤 1: 释放磁盘空间
+    # 删除 Ubuntu  runner 上不常用的工具链 (Android/.NET/Haskell 等)
+    # 可释放约 6GB 空间，确保编译不会因磁盘不足而失败
+    # ----------------------------------------------------------
     - name: Free disk space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
-        # this might remove tools that are actually needed,
-        # if set to "true" but frees about 6 GB
+        # 保留工具缓存，避免删除编译可能需要的工具
         tool-cache: false
-        
-        # all of these default to true, but feel free to set to
-        # "false" if necessary for your workflow
+        # 以下各项默认删除，可设为 false 保留
         android: true
         dotnet: true
         haskell: true
         large-packages: true
         swap-storage: false
 
+    # ----------------------------------------------------------
+    # 步骤 2: 检出本仓库代码
+    # 将 .config、自定义脚本等文件拉取到工作区
+    # ----------------------------------------------------------
     - name: Checkout
       uses: actions/checkout@main
 
+    # ----------------------------------------------------------
+    # 步骤 3: 初始化编译环境
+    # 使用 ImmortalWrt 官方脚本安装所有编译依赖 (gcc、make、flex 等)
+    # 设置时区为 Asia/Shanghai 使编译时间戳正确
+    # ----------------------------------------------------------
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
+        #  以下为手动安装依赖的方式 (已替换为官方一键脚本)
         #  sudo apt-get update
         #  sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
         #    bzip2 ccache clang clangd cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
         #    g++-multilib git gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev \
         #    libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libreadline-dev \
-        #    libssl-dev libtool lld lldb lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
+        #    libssl-dev libtool lld lldb lrzsq mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
         #    python3 python3-pip python3-ply python3-docutils qemu-utils re2c rsync scons squashfs-tools subversion swig \
         #    texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         
+        # 使用 ImmortalWRT 官方脚本一键安装编译环境
         sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.eu.org/init_build_environment.sh)'
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
@@ -61,6 +89,11 @@ jobs:
         sudo mkdir -p /srcdir
         sudo chown $USER:$GROUPS /srcdir
 
+    # ----------------------------------------------------------
+    # 步骤 4: 克隆 ImmortalWrt 源码
+    # 将源码克隆到 /srcdir 以获得更大的磁盘空间
+    # 并通过软链接关联到工作区
+    # ----------------------------------------------------------
     - name: Clone source code
       working-directory: /srcdir
       run: |
@@ -69,6 +102,11 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /srcdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    # ----------------------------------------------------------
+    # 步骤 5: 加载自定义 feeds 源
+    # 如果仓库中存在 feeds.conf.default 则覆盖源码默认值
+    # 然后执行 before-update-custom.sh (可添加第三方 feed)
+    # ----------------------------------------------------------
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -76,12 +114,26 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$SELF_BEFORE_SH
 
+    # ----------------------------------------------------------
+    # 步骤 6: 更新 feeds
+    # 从各 feed 源拉取最新的软件包定义
+    # ----------------------------------------------------------
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
+    # ----------------------------------------------------------
+    # 步骤 7: 安装 feeds
+    # 将更新后的 feed 软件包安装到编译环境中
+    # ----------------------------------------------------------
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
+    # ----------------------------------------------------------
+    # 步骤 8: 加载自定义配置
+    # 将 .config 复制为 openwrt/.config 作为编译配置
+    # 如果存在 files/ 目录则复制到 openwrt/files/ 作为固件内预置文件
+    # 最后执行 after-update-custom.sh (修改默认 IP、DHCP 范围等)
+    # ----------------------------------------------------------
     - name: Load custom config
       run: |
         [ -e files ] && mv files openwrt/files
@@ -90,6 +142,12 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$SELF_AFTER_SH
 
+    # ----------------------------------------------------------
+    # 步骤 9: 下载编译所需的软件包源码
+    # make defconfig 根据 .config 生成完整配置
+    # make download 预下载所有源码包，避免编译时网络超时
+    # 清理小于 1024 字节的下载失败文件
+    # ----------------------------------------------------------
     - name: Download package
       id: package
       run: |
@@ -99,6 +157,12 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    # ----------------------------------------------------------
+    # 步骤 10: 编译固件
+    # 优先使用全部 CPU 核心并行编译，失败后回退到单线程
+    # 单线程仍失败则开启详细日志 (V=s) 便于排查
+    # 编译产物包含 AX3000T 和 RAX3000M 两个机型的所有变体
+    # ----------------------------------------------------------
     - name: Compile the firmware
       id: compile
       run: |
@@ -107,16 +171,21 @@ jobs:
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         
-        # Need Modify https://docs.github.com/zh/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
-        # grep '^CONFIG_TARGET_DEVICE.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        # [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "DEVICE_NAME=_xiaomi-ax3000t" >>$GITHUB_ENV
+        # 设置设备标识用于 artifact 命名 (包含两个机型)
+        echo "DEVICE_NAME=_ax3000t_rax3000m" >>$GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
+    # ----------------------------------------------------------
+    # 步骤 11: 检查磁盘使用情况 (无论成功失败都执行)
+    # ----------------------------------------------------------
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
 
+    # ----------------------------------------------------------
+    # 步骤 12: 上传 bin 目录为 artifact
+    # 包含完整的编译输出 (含 packages 目录)
+    # ----------------------------------------------------------
     - name: Upload bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && !cancelled()
@@ -124,6 +193,11 @@ jobs:
         name: ImmortalWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
+    # ----------------------------------------------------------
+    # 步骤 13: 整理固件文件
+    # 删除 targets 目录下的 packages 子目录 (减小发布体积)
+    # 仅保留固件镜像文件
+    # ----------------------------------------------------------
     - name: Organize files
       id: organize
       if: (!cancelled())
@@ -133,6 +207,9 @@ jobs:
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
+    # ----------------------------------------------------------
+    # 步骤 14: 上传整理后的固件目录为 artifact
+    # ----------------------------------------------------------
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
@@ -140,15 +217,27 @@ jobs:
         name: ImmortalWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
+    # ----------------------------------------------------------
+    # 步骤 15: 生成 Release 标签和说明
+    # 标签格式: ImmortalWrt_年.月.日-时分
+    # ----------------------------------------------------------
     - name: Generate release tag
       id: tag
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         echo "release_tag=ImmortalWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        echo "ImmortalWrt 🌝 xiaomi ax3000t" >> release.txt
+        echo "ImmortalWrt for Xiaomi AX3000T & CMCC RAX3000M" >> release.txt
+        echo "" >> release.txt
+        echo "Supported devices:" >> release.txt
+        echo "- Xiaomi Mi Router AX3000T (standard / stock / AN8855)" >> release.txt
+        echo "- CMCC RAX3000M (SPI-NAND / eMMC)" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
+    # ----------------------------------------------------------
+    # 步骤 16: 上传固件到 GitHub Release
+    # 将整理后的固件文件发布为 GitHub Release
+    # ----------------------------------------------------------
     - name: Upload firmware to release
       id: release
       uses: softprops/action-gh-release@v3
@@ -160,12 +249,21 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    # ----------------------------------------------------------
+    # 步骤 17: 清理编译产物
+    # make clean 清除编译中间文件，为缓存做准备
+    # ----------------------------------------------------------
     - name: Clean Compile
       id: clean-compile
       run: |
         cd openwrt
         make clean
 
+    # ----------------------------------------------------------
+    # 步骤 18: 缓存编译目录
+    # 缓存 openwrt 目录，下次编译可复用已编译的依赖
+    # 缓存 key 基于 feeds.conf.default 的哈希值
+    # ----------------------------------------------------------
     - name: Cache Compile
       id: cache-compile
       uses: actions/cache/save@v6
@@ -174,6 +272,10 @@ jobs:
         path: openwrt
         key: ${{ runner.os }}-openwrt-${{ hashFiles('openwrt/feeds.conf.default') }}
 
+    # ----------------------------------------------------------
+    # 步骤 19: 清理旧的 workflow runs
+    # 保留最近 7 天的运行记录，至少保留 3 条
+    # ----------------------------------------------------------
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
       with:
@@ -182,6 +284,10 @@ jobs:
         retain_days: 7
         keep_minimum_runs: 3
 
+    # ----------------------------------------------------------
+    # 步骤 20: 清理旧的 GitHub Releases
+    # 保留最近 3 个 Release，删除旧的 Release 及其 tag
+    # ----------------------------------------------------------
     - name: Remove old Releases
       uses: dev-drprasad/delete-older-releases@v0.3.4
       if: steps.release.outputs.status == 'success' && !cancelled()
