@@ -1,10 +1,8 @@
 # ImmortalWrt MT7981 路由器固件编译
 
-> 仓库地址：[https://github.com/DenzelVicent/ImmortalWrt-hanwckf-firmware-build](https://github.com/DenzelVicent/ImmortalWrt-hanwckf-firmware-build)
+> 源码：[Hanwckf's ImmortalWrt](https://github.com/hanwckf/immortalwrt-mt798x) | [U-Boot](https://github.com/hanwckf/bl-mt798x)
 
-## 项目概述
-
-本项目利用 GitHub Actions 编译 [Hanwckf's ImmortalWrt](https://github.com/hanwckf/immortalwrt-mt798x) 固件及相应的 [U-Boot](https://github.com/hanwckf/bl-mt798x)。
+本项目利用 GitHub Actions 编译 ImmortalWrt 固件及相应的 U-Boot。
 支持一次性编译以下 MT7981 平台路由器的固件：
 
 - **小米 AX3000T**（标准版 / stock 版 / AN8855 交换芯片版）
@@ -57,7 +55,7 @@
 
 ## 自定义编译
 
-如需自定义固件配置，请 Fork 本仓库并根据需求进行修改。
+如需自定义固件配置，请克隆本仓库并根据需求进行修改。
 
 主要定制入口：
 
