@@ -102,7 +102,20 @@ jobs:
         ln -sf /srcdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     # ----------------------------------------------------------
-    # 步骤 5: 加载自定义 feeds 源
+    # 步骤 5: 缓存下载目录 (dl/)
+    # 缓存软件包源码，加速重复构建
+    # 缓存 key 基于 feeds 源和配置文件，配置变更自动失效
+    # ----------------------------------------------------------
+    - name: Cache downloads
+      uses: actions/cache@v4
+      with:
+        path: openwrt/dl
+        key: ponwrt-dl-${{ env.DEVICE_CONFIG }}-${{ hashFiles('feeds.conf.default', 'configs/*.config') }}
+        restore-keys: |
+          ponwrt-dl-${{ env.DEVICE_CONFIG }}-
+
+    # ----------------------------------------------------------
+    # 步骤 6: 加载自定义 feeds 源
     # 如果仓库中存在 feeds.conf.default 则覆盖源码默认值
     # 然后执行 before-update-custom.sh (可添加第三方 feed)
     # ----------------------------------------------------------
@@ -114,21 +127,38 @@ jobs:
         $GITHUB_WORKSPACE/$SELF_BEFORE_SH
 
     # ----------------------------------------------------------
-    # 步骤 6: 更新 feeds
+    # 步骤 7: 更新 feeds
     # 从各 feed 源拉取最新的软件包定义
     # ----------------------------------------------------------
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
     # ----------------------------------------------------------
-    # 步骤 7: 安装 feeds
+    # 步骤 8: 安装 feeds
     # 将更新后的 feed 软件包安装到编译环境中
     # ----------------------------------------------------------
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
     # ----------------------------------------------------------
-    # 步骤 8: 合并配置并加载自定义脚本
+    # 步骤 9: 加载仓库签名密钥 (APK)
+    # 用于对编译产物的软件包进行签名验证
+    # 需在仓库 Settings → Secrets 中配置 PONWRT_APK_PRIVATE_KEY
+    # 未配置时跳过，不影响编译
+    # ----------------------------------------------------------
+    - name: Load repository signing key
+      working-directory: openwrt
+      env:
+        PONWRT_APK_PRIVATE_KEY: ${{ secrets.PONWRT_APK_PRIVATE_KEY }}
+      run: |
+        if [ -n "$PONWRT_APK_PRIVATE_KEY" ]; then
+          umask 077
+          printf '%s\n' "$PONWRT_APK_PRIVATE_KEY" > private-key.pem
+          openssl ec -in private-key.pem -pubout -out public-key.pem
+        fi
+
+    # ----------------------------------------------------------
+    # 步骤 10: 合并配置并加载自定义脚本
     # 使用 kconfig.pl 将设备配置与发布配置合并生成 .config
     # 同名配置项以 release.config 为准
     # 执行 after-update-custom.sh (可修改默认 IP、DHCP 等)
@@ -145,7 +175,7 @@ jobs:
         $GITHUB_WORKSPACE/$SELF_AFTER_SH
 
     # ----------------------------------------------------------
-    # 步骤 9: 下载编译所需的软件包源码
+    # 步骤 11: 下载编译所需的软件包源码
     # make download 预下载所有源码包，避免编译时网络超时
     # 清理小于 1024 字节的下载失败文件
     # ----------------------------------------------------------
@@ -158,7 +188,7 @@ jobs:
         find dl -size -1024c -exec rm -f {} \;
 
     # ----------------------------------------------------------
-    # 步骤 10: 编译固件
+    # 步骤 12: 编译固件
     # 优先使用全部 CPU 核心并行编译，失败后回退到单线程
     # 单线程仍失败则开启详细日志 (V=s) 便于排查
     # ----------------------------------------------------------
@@ -173,14 +203,14 @@ jobs:
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
     # ----------------------------------------------------------
-    # 步骤 11: 检查磁盘使用情况
+    # 步骤 13: 检查磁盘使用情况
     # ----------------------------------------------------------
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
 
     # ----------------------------------------------------------
-    # 步骤 12: 整理固件文件
+    # 步骤 14: 整理固件文件
     # 只收集固件镜像 (.itb/.img/.ubi/.bin)，排除 packages 目录
     # 使用 find 递归遍历 bin/targets/airoha 兼容不同子目录布局
     # 以父目录名 (profile 名) 作前缀重命名，避免同名文件覆盖
@@ -206,7 +236,7 @@ jobs:
         fi
 
     # ----------------------------------------------------------
-    # 步骤 13: 生成 Release 标签和说明
+    # 步骤 15: 生成 Release 标签和说明
     # 标签格式: PonWrt_年.月.日-时分
     # ----------------------------------------------------------
     - name: Generate release tag
@@ -219,7 +249,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 14: 上传固件到 GitHub Release
+    # 步骤 16: 上传固件到 GitHub Release
     # ----------------------------------------------------------
     - name: Upload firmware to release
       id: release
@@ -233,7 +263,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # ----------------------------------------------------------
-    # 步骤 15: 清理旧的 workflow runs
+    # 步骤 17: 清理旧的 workflow runs
     # 保留最近 7 天的运行记录，至少保留 3 条
     # ----------------------------------------------------------
     - name: Delete workflow runs
@@ -245,7 +275,7 @@ jobs:
         keep_minimum_runs: 3
 
     # ----------------------------------------------------------
-    # 步骤 16: 清理旧的 GitHub Releases
+    # 步骤 18: 清理旧的 GitHub Releases
     # 保留最近 3 个 Release，删除旧的 Release 及其 tag
     # ----------------------------------------------------------
     - name: Remove old Releases
