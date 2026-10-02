@@ -1,78 +1,35 @@
-# ImmortalWrt MT7981 路由器固件编译
+# PonWrt 固件云编译 (Airoha AN7581)
 
-> 仓库地址：[https://github.com/DenzelVicent/ImmortalWrt-hanwckf-firmware-build](https://github.com/DenzelVicent/ImmortalWrt-hanwckf-firmware-build)
+本分支用于云编译 [PonWrt](https://github.com/pbs05/ponwrt) 固件，目标设备为 Nokia XG-040G-MD (Airoha AN7581 平台)。
 
-## 项目概述
+## 仓库结构
 
-本项目利用 GitHub Actions 编译 [Hanwckf's ImmortalWrt](https://github.com/hanwckf/immortalwrt-mt798x) 固件及相应的 [U-Boot](https://github.com/hanwckf/bl-mt798x)。
-支持一次性编译以下 MT7981 平台路由器的固件：
+```
+├── .github/workflows/
+│   └── build-ponwrt.yml        # GitHub Actions 编译工作流
+├── configs/
+│   ├── nokia-xg-040g-md.config # 设备专用编译配置
+│   └── release.config          # 公共发布配置 (与设备配置合并)
+├── before-update-custom.sh     # feeds 更新前执行的自定义脚本
+├── after-update-custom.sh      # feeds 更新后执行的自定义脚本
+└── feeds.conf.default          # 自定义 feeds 源配置
+```
 
-- **小米 AX3000T**（标准版 / stock 版 / AN8855 交换芯片版）
-- **CMCC RAX3000M**（SPI-NAND 版 / eMMC 版）
+## 编译流程
 
-## 编译工作流
+1. 克隆 PonWrt 源码 (`pbs05/ponwrt` master 分支)
+2. 覆盖 feeds 配置并执行自定义脚本
+3. 更新并安装 feeds
+4. 使用 `kconfig.pl` 合并设备配置与发布配置
+5. 编译固件并发布到 GitHub Release
 
-| 工作流 | 说明 | 触发方式 |
-|---|---|---|
-| `build-immortalwrt.yml` | 编译所有支持设备的 ImmortalWrt 固件 | 手动触发 (`workflow_dispatch`) |
-| `build-u-boot.yml` | 并行编译所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
+## 触发方式
 
-## 默认配置
+- **手动触发**: GitHub Actions 页面点击 "Run workflow"
+- **定时编译**: 编辑 workflow 文件取消 `schedule` 注释
 
-- **默认 LAN IP**: `10.0.0.1`
-- **DHCP 范围**: `10.0.0.2` – `10.0.0.56`
+## 自定义配置
 
-## 预装插件
-
-| 插件 | 说明 |
-|---|---|
-| `luci-app-openclash` | OpenClash 代理客户端（LuCI 界面，内核需首次启动后下载） |
-| `luci-app-samba4` | Samba4 文件共享服务 |
-| `luci-app-hd-idle` | USB 硬盘自动休眠 |
-| `luci-app-ttyd` | 网页终端（浏览器访问路由器 Shell） |
-| `luci-app-autoreboot` | 定时自动重启 |
-| `luci-app-turboacc-mtk` | MTK Turbo ACC 网络加速 |
-| `luci-app-eqos-mtk` | MTK QoS 带宽控制 |
-| `luci-app-mtwifi-cfg` | MTK WiFi 配置 |
-| `luci-app-upnp` | UPnP 自动端口映射 |
-| `luci-theme-argon` | Argon 主题 |
-
-## 支持的设备
-
-### 固件 (ImmortalWrt)
-
-| 设备 | 配置标识符 | 变体 |
-|---|---|---|
-| 小米 AX3000T | `xiaomi_mi-router-ax3000t` | 标准版、stock 版、AN8855 版、AN8855-stock 版 |
-| CMCC RAX3000M | `cmcc_rax3000m` | SPI-NAND 版、eMMC 版 |
-
-### U-Boot
-
-| 板型 | `BOARD` 值 | SoC |
-|---|---|---|
-| 小米 AX3000T | `ax3000t` | MT7981 |
-| 小米 AX3000T (AN8855) | `ax3000t_an8855` | MT7981 |
-| CMCC RAX3000M (SPI-NAND) | `rax3000m` | MT7981 |
-| CMCC RAX3000M (eMMC) | `rax3000m-emmc` | MT7981 |
-
-## 自定义编译
-
-如需自定义固件配置，请 Fork 本仓库并根据需求进行修改。
-
-主要定制入口：
-
-| 文件 | 用途 |
-|---|---|
-| `.config` | OpenWrt menuconfig 配置 — 定义目标设备、内核选项、WiFi 驱动特性及包含的软件包 |
-| `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
-| `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等 |
-| `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |
-| `files/` | （可选）预置文件目录，将文件覆盖到固件根文件系统 |
-
-## 编译指南参考
-
-详细编译说明请参考：[hanwckf ImmortalWrt MT798x 编译说明](https://cmi.hanwckf.top/p/immortalwrt-mt798x/)
-
-## 许可证
-
-本项目依据 Apache 2.0 许可证进行授权。有关详细信息，请参阅 [LICENSE](LICENSE) 文件。
+- 修改 `configs/nokia-xg-040g-md.config` 调整软件包和内核模块
+- 修改 `configs/release.config` 调整公共配置项
+- 修改 `after-update-custom.sh` 自定义默认 IP、DHCP 等
