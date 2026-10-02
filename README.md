@@ -50,8 +50,8 @@
 |---|---|---|
 | 小米 AX3000T | `ax3000t` | MT7981 |
 | 小米 AX3000T (AN8855) | `ax3000t_an8855` | MT7981 |
-| CMCC RAX3000M (SPI-NAND) | `rax3000m` | MT7981 |
-| CMCC RAX3000M (eMMC) | `rax3000m-emmc` | MT7981 |
+| CMCC RAX3000M (SPI-NAND) | `cmcc_rax3000m` | MT7981 |
+| CMCC RAX3000M (eMMC) | `cmcc_rax3000m-emmc` | MT7981 |
 
 ## 自定义编译
 
