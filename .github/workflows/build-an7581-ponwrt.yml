@@ -209,29 +209,19 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 14: 整理固件文件
-    # 只收集固件镜像 (.itb/.img/.ubi/.bin)，排除 packages 目录
-    # 使用 find 递归遍历 bin/targets/airoha 兼容不同子目录布局
-    # 以父目录名 (profile 名) 作前缀重命名，避免同名文件覆盖
+    # 参考上游 ponwrt release.yml 的打包方式: 将整个 subtarget 目录
+    # (排除 packages) 压缩为 tar.zst, 保证产物完整且一定可下载
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
       if: (!cancelled())
       run: |
         mkdir -p release
-        found=0
-        while IFS= read -r f; do
-          cp "$f" "release/$(basename "$(dirname "$f")")-$(basename "$f")"
-          found=1
-        done < <(find openwrt/bin/targets/airoha -type f \
-                   \( -name '*.itb' -o -name '*.img' -o -name '*.ubi' -o -name '*.bin' \) \
-                   -not -path '*/packages/*')
-        if [ "$found" = "1" ]; then
-          echo "status=success" >> $GITHUB_OUTPUT
-          echo "FIRMWARE=$PWD/release" >> $GITHUB_ENV
-        else
-          echo "no firmware images found"
-          echo "status=failure" >> $GITHUB_OUTPUT
-        fi
+        tar --zstd -cf release/ponwrt-an7581.tar.zst \
+            -C openwrt/bin/targets/airoha an7581 \
+            --exclude='an7581/packages'
+        echo "status=success" >> $GITHUB_OUTPUT
+        echo "FIRMWARE=$PWD/release" >> $GITHUB_ENV
 
     # ----------------------------------------------------------
     # 步骤 15: 上传固件为 artifact
