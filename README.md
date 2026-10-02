@@ -1,5 +1,7 @@
 # ImmortalWrt MT7981 路由器固件编译
 
+> 仓库地址：[https://github.com/DenzelVicent/ImmortalWrt-hanwckf-firmware-build](https://github.com/DenzelVicent/ImmortalWrt-hanwckf-firmware-build)
+
 ## 项目概述
 
 本项目利用 GitHub Actions 编译 [Hanwckf's ImmortalWrt](https://github.com/hanwckf/immortalwrt-mt798x) 固件及相应的 [U-Boot](https://github.com/hanwckf/bl-mt798x)。
@@ -17,8 +19,23 @@
 
 ## 默认配置
 
-- **默认 LAN IP**: `192.168.31.1`
-- **DHCP 范围**: `192.168.31.2` – `192.168.31.56`
+- **默认 LAN IP**: `10.0.0.1`
+- **DHCP 范围**: `10.0.0.2` – `10.0.0.56`
+
+## 预装插件
+
+| 插件 | 说明 |
+|---|---|
+| `luci-app-openclash` | OpenClash 代理客户端（LuCI 界面，内核需首次启动后下载） |
+| `luci-app-samba4` | Samba4 文件共享服务 |
+| `luci-app-hd-idle` | USB 硬盘自动休眠 |
+| `luci-app-ttyd` | 网页终端（浏览器访问路由器 Shell） |
+| `luci-app-autoreboot` | 定时自动重启 |
+| `luci-app-turboacc-mtk` | MTK Turbo ACC 网络加速 |
+| `luci-app-eqos-mtk` | MTK QoS 带宽控制 |
+| `luci-app-mtwifi-cfg` | MTK WiFi 配置 |
+| `luci-app-upnp` | UPnP 自动端口映射 |
+| `luci-theme-argon` | Argon 主题 |
 
 ## 支持的设备
 
