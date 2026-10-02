@@ -196,7 +196,8 @@ jobs:
     # ----------------------------------------------------------
     # 步骤 13: 整理固件文件
     # 删除 targets 目录下的 packages 子目录 (减小发布体积)
-    # 仅保留固件镜像文件
+    # 删除 manifest/buildinfo/校验和等非固件附属文件
+    # 按设备型号 (profile) 将固件分目录存放到 release/<profile>/
     # ----------------------------------------------------------
     - name: Organize files
       id: organize
@@ -204,9 +205,19 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        # 只保留可刷写的固件镜像, 删除 manifest/buildinfo/校验和等附属文件
         find . -maxdepth 1 -type f ! -name '*.bin' ! -name '*.itb' -delete
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        # 固件文件名形如 immortalwrt-<target>-<subtarget>-<profile>-<类型>.bin
+        prefix="immortalwrt-$(basename "$(dirname "$PWD")")-$(basename "$PWD")-"
+        for f in *.bin *.itb; do
+          [ -e "$f" ] || continue
+          base="${f#"$prefix"}"
+          prof="${base%-initramfs-kernel.bin}"
+          prof="${prof%-squashfs-sysupgrade.bin}"
+          prof="${prof%-squashfs-factory.bin}"
+          mkdir -p "$GITHUB_WORKSPACE/release/$prof"
+          mv "$f" "$GITHUB_WORKSPACE/release/$prof/"
+        done
+        echo "FIRMWARE=$GITHUB_WORKSPACE/release" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
@@ -247,7 +258,10 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
+        # release/ 下按设备型号分子目录, 递归匹配所有固件镜像
+        files: |
+          ${{ env.FIRMWARE }}/**/*.bin
+          ${{ env.FIRMWARE }}/**/*.itb
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
