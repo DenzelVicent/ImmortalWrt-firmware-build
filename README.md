@@ -2,7 +2,7 @@
 
 > 源码：[PonWrt](https://github.com/pbs05/ponwrt) | 基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt)
 
-本仓库用于云编译 PonWrt 固件，目标设备为 Nokia XG-040G-MD (Airoha AN7581 平台)。
+本仓库用于云编译 PonWrt 固件，当前编译目标为 Nokia XG-040G-MD (Airoha AN7581 平台)。
 
 ## 免责声明
 
@@ -29,39 +29,146 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 | AN7581 | ZNXT ZN515XG-D | `znxt_zn515xg-d` | `reservearea` |
 | AN7583 | Nokia XG-040G-MF | `nokia_xg-040g-mf`、`nokia_xg-040g-mf-ubi` | `bosa`、`ri` |
 
-## 云编译
+## 默认配置
 
-### 仓库结构
+| 项目 | 值 |
+| --- | --- |
+| 管理地址 | `192.168.1.1` |
+| CPU 架构 | `aarch64_cortex-a53` |
+| 文件系统 | SquashFS + UBIFS |
+| 包管理器 | APK (openssl) |
+| 防火墙 | firewall4 + nftables (JSON) |
+| DNS/DHCP | dnsmasq-full (DNSSEC、TFTP、Conntrack) |
+| SSH | Dropbear |
+| Web 服务 | uhttpd + LuCI (简体中文) |
+| 网络加速 | BBR 拥塞控制 + CAKE 队列管理 + NFT Offload |
+| VPN | WireGuard |
+| 编译内核 | Linux 6.18 |
+
+## 预装软件包
+
+### LuCI 应用
+
+| 软件包 | 说明 |
+| --- | --- |
+| `luci-app-autoreboot` | 定时重启 |
+| `luci-app-firewall` | 防火墙管理 |
+| `luci-app-hd-idle` | 硬盘休眠管理 |
+| `luci-app-openclash` | Clash 代理管理 |
+| `luci-app-package-manager` | 软件包管理 |
+| `luci-app-pon` | PON 光猫管理 |
+| `luci-app-samba4` | Samba 文件共享 |
+| `luci-app-ttyd` | Web 终端 |
+| `luci-app-upnp` | UPnP 管理 |
+
+### PON 平台组件
+
+| 软件包 | 说明 |
+| --- | --- |
+| `airoha-ponctl` | PON 控制工具 |
+| `airoha-pond` | PON 守护进程 |
+| `airoha-pon-debug` | PON 调试工具 |
+| `airoha-en7581-npu-firmware` | EN7581 NPU 固件 |
+
+### 内核模块
+
+| 软件包 | 说明 |
+| --- | --- |
+| `kmod-wireguard` | WireGuard VPN |
+| `kmod-tcp-bbr` | BBR 拥塞控制算法 |
+| `kmod-sched-cake` | CAKE 队列管理 |
+| `kmod-nft-offload` | NFT 硬件卸载 |
+| `kmod-nft-tproxy` | NFT 透明代理 |
+| `kmod-nft-bridge` | NFT 桥接 |
+| `kmod-nf-flow` | 连接跟踪快路径 |
+| `kmod-nf-conntrack-bridge` | 桥接连接跟踪 |
+| `kmod-tun` | TUN/TAP 虚拟网络设备 |
+| `kmod-mt7915e` | MediaTek MT7915 WiFi 驱动 |
+| `kmod-usb3` / `kmod-usb-xhci-hcd` | USB 3.0 支持 |
+| `kmod-fs-ext4` / `kmod-fs-exfat` / `kmod-fs-vfat` | 文件系统驱动 |
+| `kmod-phy-airoha-en8811h` | Airoha EN8811H 2.5G PHY 驱动 |
+| `kmod-phy-maxlinear` / `kmod-phy-realtek` | MaxLinear / Realtek PHY 驱动 |
+| `kmod-airoha-en7572` / `kmod-airoha-xpon` / `kmod-airoha-paged-bosa` | Airoha PON 驱动 |
+
+## 仓库结构
 
 ```
 ├── .github/workflows/
 │   └── build-ponwrt.yml        # GitHub Actions 编译工作流
 ├── configs/
-│   ├── nokia-xg-040g-md.config # 设备专用编译配置
+│   ├── an7581.config           # AN7581 平台完整配置 (本地编译用)
+│   ├── nokia-xg-040g-md.config # Nokia XG-040G-MD 设备专用配置 (云编译用)
 │   └── release.config          # 公共发布配置 (与设备配置合并)
 ├── before-update-custom.sh     # feeds 更新前执行的自定义脚本
 ├── after-update-custom.sh      # feeds 更新后执行的自定义脚本
 └── feeds.conf.default          # 自定义 feeds 源配置
 ```
 
+## 脚本说明
+
+### `before-update-custom.sh`
+
+在 feeds 更新**前**执行，用于修改 feeds 源。当前内容均为注释示例：
+
+- 取消注释可启用 `helloworld` 等第三方 feed
+- 可添加 PassWall、kenzok8 等软件源
+
+### `after-update-custom.sh`
+
+在 feeds 安装**后**、编译**前**执行，用于修改固件默认参数。当前内容均为注释示例：
+
+- 取消注释 `sed` 行可修改默认 LAN IP（当前为 `192.168.1.1`）
+- 可添加其他 `sed` 命令修改 DHCP、主机名等默认配置
+
+### `feeds.conf.default`
+
+覆盖源码自带的 feeds 源配置。除 ImmortalWrt 官方源外，额外包含：
+
+- `pon_drivers` — Airoha PON 硬件驱动
+- `pon_userspace` — Airoha PON 用户空间工具
+
+## 云编译
+
 ### 编译流程
 
-1. 克隆 PonWrt 源码 (`pbs05/ponwrt` master 分支)
-2. 覆盖 feeds 配置并执行自定义脚本
-3. 更新并安装 feeds
-4. 使用 `kconfig.pl` 合并设备配置与发布配置
-5. 编译固件并发布到 GitHub Release
+1. 释放 Runner 磁盘空间 (约 6GB)
+2. 检出本仓库配置文件与脚本
+3. 安装编译依赖工具链
+4. 克隆 PonWrt 源码到 `/srcdir` (更大磁盘)
+5. 缓存 `dl/` 下载目录 (按配置哈希，加速重复构建)
+6. 覆盖 feeds 源，执行 `before-update-custom.sh`
+7. 更新并安装 feeds
+8. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
+9. `kconfig.pl +` 合并设备配置与发布配置 → `make defconfig`
+10. 执行 `after-update-custom.sh` 修改默认参数
+11. 预下载软件包源码 (`make download`)
+12. 并行编译固件 (失败自动回退单线程)
+13. 收集固件镜像，发布到 GitHub Release
+14. 清理旧 workflow runs (保留 7 天 / 至少 3 条) 和旧 Release (保留最近 3 个)
 
 ### 触发方式
 
 - **手动触发**: GitHub Actions 页面点击 "Run workflow"
-- **定时编译**: 编辑 workflow 文件取消 `schedule` 注释
+- **定时编译**: 编辑 workflow 文件取消 `schedule` 注释 (UTC 时间)
+
+### 配置合并规则
+
+云编译使用 `kconfig.pl +` 合并两个配置文件：
+
+```
+kconfig.pl + configs/nokia-xg-040g-md.config configs/release.config > .config
+```
+
+- `nokia-xg-040g-md.config` — 设备级配置：目标平台、软件包选择、内核模块
+- `release.config` — 公共配置：通用网络加速模块 (WireGuard、BBR、CAKE 等)
+- **同名配置项以 `release.config` 为准**
 
 ### 自定义配置
 
 - 修改 `configs/nokia-xg-040g-md.config` 调整软件包和内核模块
 - 修改 `configs/release.config` 调整公共配置项
 - 修改 `after-update-custom.sh` 自定义默认 IP、DHCP 等
+- 修改 `.github/workflows/build-ponwrt.yml` 的 `env` 段切换设备或源码分支
 
 ## 本地编译
 
