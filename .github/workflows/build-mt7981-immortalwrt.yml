@@ -4,7 +4,7 @@
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
-name: Build ImmortalWrt Firmware
+name: Build ImmortalWrt Firmware (MT7981)
 on:
   # 定时编译 (默认关闭，取消注释即可启用，cron 使用 UTC 时间)
   # schedule:
