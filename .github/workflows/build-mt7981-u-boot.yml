@@ -40,12 +40,25 @@ jobs:
     #   - ax3000t_an8855: AN8855 外置交换芯片版本
     #
     # RAX3000M 系列:
-    #   - rax3000m:       SPI-NAND 闪存版本
-    #   - rax3000m-emmc:  eMMC 闪存版本
+    #   - cmcc_rax3000m:       SPI-NAND 闪存版本
+    #   - cmcc_rax3000m-emmc:  eMMC 闪存版本
+    #
+    # multi_layout 说明:
+    #   MULTI_LAYOUT=1 时 build.sh 会选用 <soc>_<board>_multi_layout_defconfig,
+    #   但上游 bl-mt798x 仅为 ax3000t 系列提供该配置, cmcc_rax3000m 没有,
+    #   因此 RAX3000M 必须使用 multi_layout=0, 否则 build.sh 报 defconfig not found。
     # ----------------------------------------------------------
     strategy:
       matrix:
-        board: [ax3000t, ax3000t_an8855, cmcc_rax3000m, cmcc_rax3000m-emmc]
+        include:
+          - board: ax3000t
+            multi_layout: 1
+          - board: ax3000t_an8855
+            multi_layout: 1
+          - board: cmcc_rax3000m
+            multi_layout: 0
+          - board: cmcc_rax3000m-emmc
+            multi_layout: 0
 
     steps:
 
@@ -103,16 +116,16 @@ jobs:
 
       # ----------------------------------------------------------
       # 步骤 4: 编译 U-Boot
-      # SOC=mt7981:       指定 SoC 型号为 MT7981 (Filogic 820)
-      # BOARD=<matrix>:   当前矩阵中的 board 名称
-      # MULTI_LAYOUT=1:   支持多种分区布局 (兼容不同固件版本)
-      # FIXED_MTDPARTS=1: 使用固定的 MTD 分区表
+      # SOC=mt7981:            指定 SoC 型号为 MT7981 (Filogic 820)
+      # BOARD=<matrix>:        当前矩阵中的 board 名称
+      # MULTI_LAYOUT=<matrix>: 是否使用多分区布局 defconfig (见矩阵说明)
+      # FIXED_MTDPARTS=1:      使用固定的 MTD 分区表
       # ----------------------------------------------------------
       - name: Compile U-Boot
         id: compile
         run: |
           cd u-boot
-          SOC=mt7981 BOARD=${{ matrix.board }} MULTI_LAYOUT=1 FIXED_MTDPARTS=1 ./build.sh
+          SOC=mt7981 BOARD=${{ matrix.board }} MULTI_LAYOUT=${{ matrix.multi_layout }} FIXED_MTDPARTS=1 ./build.sh
           
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
