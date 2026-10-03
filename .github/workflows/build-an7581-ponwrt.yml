@@ -208,7 +208,8 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 14: 整理固件文件
-    # 将整个 subtarget 目录 (排除 packages) 复制为 release/<设备>/ 散文件目录
+    # 只复制可刷写的固件镜像 (*.bin / *.itb) 到 release/<设备>/ 散文件目录
+    # manifest/buildinfo/sha256sums/json 等非固件附属文件不保留
     # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
     # ----------------------------------------------------------
     - name: Organize firmware files
@@ -218,8 +219,11 @@ jobs:
         device="${DEVICE_NAME#_}"
         echo "DEVICE=$device" >> $GITHUB_ENV
         mkdir -p "release/$device"
-        cp -a openwrt/bin/targets/airoha/an7581/. "release/$device/"
-        rm -rf "release/$device/packages"
+        for f in openwrt/bin/targets/airoha/an7581/*.bin openwrt/bin/targets/airoha/an7581/*.itb; do
+          [ -e "$f" ] || continue
+          cp "$f" "release/$device/"
+        done
+        ls -l "release/$device"
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
