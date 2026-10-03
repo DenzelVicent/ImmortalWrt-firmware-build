@@ -208,31 +208,30 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 14: 整理固件文件
-    # 参考上游 ponwrt release.yml 的打包方式: 将整个 subtarget 目录
-    # (排除 packages) 压缩为 tar.zst, 保证产物完整且一定可下载
+    # 将整个 subtarget 目录 (排除 packages) 复制为 release/<设备>/ 散文件目录
+    # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
       if: (!cancelled())
       run: |
-        mkdir -p release
         device="${DEVICE_NAME#_}"
-        tar --zstd -cf "release/ponwrt-${device}.tar.zst" \
-            -C openwrt/bin/targets/airoha \
-            --exclude='an7581/packages' \
-            an7581
+        echo "DEVICE=$device" >> $GITHUB_ENV
+        mkdir -p "release/$device"
+        cp -a openwrt/bin/targets/airoha/an7581/. "release/$device/"
+        rm -rf "release/$device/packages"
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 15: 上传固件压缩包为 artifact
-    # artifact 内容即 tar.zst (与 Release 附件一致), 由下方 release job 统一发布
+    # 步骤 15: 上传固件散文件目录为 artifact
+    # 下载后直接是各固件文件, 便于单独取用; tar.zst 打包由 release job 执行
     # ----------------------------------------------------------
-    - name: Upload firmware package
+    - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: PonWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: release/*.tar.zst
+        path: release/${{ env.DEVICE }}
 
   # ------------------------------------------------------------
   # Release 发布 job
@@ -260,12 +259,20 @@ jobs:
           path: artifacts
 
       # ----------------------------------------------------------
-      # 步骤 2: 汇总压缩包到 release 目录
+      # 步骤 2: 将设备散文件目录打包为 tar.zst 汇总到 release 目录
+      # artifact 名格式 PonWrt_firmware_<设备>_<日期>, 从中反解设备名
+      # 压缩包名沿用上游形态 ponwrt-<设备>.tar.zst
       # ----------------------------------------------------------
-      - name: Organize release files
+      - name: Package firmware by device
         run: |
           mkdir -p release
-          mv artifacts/*/*.tar.zst release/
+          for d in artifacts/*/; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            device="$(echo "$name" | sed -E 's/^PonWrt_firmware_//; s/_[0-9]{12}$//')"
+            tar --zstd -cf "release/ponwrt-${device}.tar.zst" -C "$d" .
+            echo "Packaged $device -> release/ponwrt-${device}.tar.zst"
+          done
           ls -l release/
 
       # ----------------------------------------------------------
