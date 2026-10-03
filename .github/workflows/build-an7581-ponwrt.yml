@@ -218,8 +218,9 @@ jobs:
       run: |
         mkdir -p release
         tar --zstd -cf release/ponwrt-an7581.tar.zst \
-            -C openwrt/bin/targets/airoha an7581 \
-            --exclude='an7581/packages'
+            -C openwrt/bin/targets/airoha \
+            --exclude='an7581/packages' \
+            an7581
         echo "status=success" >> $GITHUB_OUTPUT
         echo "FIRMWARE=$PWD/release" >> $GITHUB_ENV
 
