@@ -210,9 +210,27 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 13: 按硬件型号上传固件为 artifact
+    # 步骤 13: 按硬件型号压缩固件为独立归档文件
+    # 每个型号目录打包为一个 tar.zst, 供 Release 下载
+    # 型号目录不存在时 (.config 未启用该设备) 跳过
+    # ----------------------------------------------------------
+    - name: Package firmware by model
+      id: package
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      run: |
+        cd "$GITHUB_WORKSPACE/release"
+        for model_dir in */; do
+          [ -d "$model_dir" ] || continue
+          model="${model_dir%/}"
+          tar --zstd -cf "${model}.tar.zst" -C "$model_dir" .
+          echo "Packaged $model -> ${model}.tar.zst"
+        done
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    # ----------------------------------------------------------
+    # 步骤 14: 按硬件型号上传固件为 artifact
     # 每个型号一个独立 artifact (下载即对应压缩包), 不合并为单一目录
-    # 型号目录不存在时 ( .config 未启用该设备) 跳过对应上传
+    # 型号目录不存在时 (.config 未启用该设备) 跳过对应上传
     # ----------------------------------------------------------
     - name: Upload firmware xiaomi_mi-router-ax3000t
       uses: actions/upload-artifact@main
@@ -243,8 +261,8 @@ jobs:
         path: release/cmcc_rax3000m-emmc
 
     # ----------------------------------------------------------
-    # 步骤 14: 生成 Release 标签和说明
-    # 标签格式: ImmortalWrt_年.月.日-时分
+    # 步骤 15: 生成 Release 标签和说明
+    # 标签格式: ImmortalWrt_年。月.日 - 时分
     # ----------------------------------------------------------
     - name: Generate release tag
       id: tag
@@ -260,25 +278,22 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 15: 上传固件到 GitHub Release
-    # 将整理后的固件文件发布为 GitHub Release
+    # 步骤 16: 上传固件到 GitHub Release
+    # 上传按型号打包的 tar.zst 归档文件 (每个型号一个压缩包)
     # ----------------------------------------------------------
     - name: Upload firmware to release
       id: release
       uses: softprops/action-gh-release@v3
-      if: steps.tag.outputs.status == 'success' && !cancelled()
+      if: steps.package.outputs.status == 'success' && !cancelled()
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        # release/ 下按设备型号分子目录, 递归匹配所有固件镜像
-        files: |
-          ${{ env.FIRMWARE }}/**/*.bin
-          ${{ env.FIRMWARE }}/**/*.itb
+        files: ${{ env.FIRMWARE }}/*.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # ----------------------------------------------------------
-    # 步骤 16: 清理编译产物
+    # 步骤 17: 清理编译产物
     # make clean 清除编译中间文件，为缓存做准备
     # ----------------------------------------------------------
     - name: Clean Compile
@@ -288,7 +303,7 @@ jobs:
         make clean
 
     # ----------------------------------------------------------
-    # 步骤 17: 缓存编译目录
+    # 步骤 18: 缓存编译目录
     # 缓存 openwrt 目录，下次编译可复用已编译的依赖
     # 缓存 key 基于 feeds.conf.default 的哈希值
     # ----------------------------------------------------------
@@ -301,7 +316,7 @@ jobs:
         key: ${{ runner.os }}-openwrt-${{ hashFiles('openwrt/feeds.conf.default') }}
 
     # ----------------------------------------------------------
-    # 步骤 18: 清理旧的 workflow runs
+    # 步骤 19: 清理旧的 workflow runs
     # 保留最近 7 天的运行记录，至少保留 3 条
     # ----------------------------------------------------------
     - name: Delete workflow runs
@@ -313,7 +328,7 @@ jobs:
         keep_minimum_runs: 3
 
     # ----------------------------------------------------------
-    # 步骤 19: 清理旧的 GitHub Releases
+    # 步骤 20: 清理旧的 GitHub Releases
     # 保留最近 3 个 Release，删除旧的 Release 及其 tag
     # ----------------------------------------------------------
     - name: Remove old Releases
