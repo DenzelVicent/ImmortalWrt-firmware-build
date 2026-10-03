@@ -131,24 +131,37 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 5: 上传编译产物为 artifact
-      # 每个 board 的 U-Boot 二进制文件单独上传
+      # 步骤 5: 按 board 打包编译产物为独立压缩包
+      # 每个 matrix job 只编译一个 board, 将其 output 目录打包为 tar.zst
       # ----------------------------------------------------------
-      - name: Upload bin directory
-        uses: actions/upload-artifact@main
+      - name: Package U-Boot by board
+        id: package
         if: steps.compile.outputs.status == 'success' && !cancelled()
-        with:
-          name: u-boot_bin_${{ matrix.board }}${{ env.FILE_DATE }}
-          path: u-boot/output
+        run: |
+          mkdir -p release
+          tar --zstd -cf "release/${{ matrix.board }}.tar.zst" -C u-boot/output .
+          echo "Packaged ${{ matrix.board }} -> release/${{ matrix.board }}.tar.zst"
+          echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 6: 生成 Release 标签
+      # 步骤 6: 上传编译产物为 artifact
+      # 每个 board 的压缩包单独上传
+      # ----------------------------------------------------------
+      - name: Upload U-Boot package
+        uses: actions/upload-artifact@main
+        if: steps.package.outputs.status == 'success' && !cancelled()
+        with:
+          name: u-boot_${{ matrix.board }}${{ env.FILE_DATE }}
+          path: release/${{ matrix.board }}.tar.zst
+
+      # ----------------------------------------------------------
+      # 步骤 7: 生成 Release 标签
       # 标签格式: U-Boot_年.月.日-时分
       # 注意: 多个 board 并行时共用同一时间标签，后完成的会覆盖
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
-        if: steps.compile.outputs.status == 'success' && !cancelled()
+        if: steps.package.outputs.status == 'success' && !cancelled()
         run: |
           echo "release_tag=U-Boot_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
@@ -156,21 +169,21 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 7: 上传 U-Boot 到 GitHub Release
+      # 步骤 8: 上传 U-Boot 到 GitHub Release
       # ----------------------------------------------------------
-      - name: Upload firmware to release
+      - name: Upload U-Boot to release
         id: release
         uses: softprops/action-gh-release@v3
         if: steps.tag.outputs.status == 'success' && !cancelled()
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
-          files: u-boot/output/*
+          files: release/${{ matrix.board }}.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
       # ----------------------------------------------------------
-      # 步骤 8: 清理旧的 workflow runs
+      # 步骤 9: 清理旧的 workflow runs
       # 保留最近 7 天的运行记录，至少保留 3 条
       # ----------------------------------------------------------
       - name: Delete workflow runs
@@ -182,7 +195,7 @@ jobs:
           keep_minimum_runs: 3
 
       # ----------------------------------------------------------
-      # 步骤 9: 清理旧的 GitHub Releases
+      # 步骤 10: 清理旧的 GitHub Releases
       # 保留最近 3 个 Release，删除旧的 Release 及其 tag
       # ----------------------------------------------------------
       - name: Remove old Releases
