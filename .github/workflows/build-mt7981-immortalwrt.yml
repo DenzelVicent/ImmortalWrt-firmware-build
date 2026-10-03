@@ -226,37 +226,38 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 14: 按硬件型号上传固件压缩包为 artifact
-    # 每个型号一个独立 artifact (下载即对应 tar.zst), 与 Release 附件一致
-    # 压缩包不存在时 (.config 未启用该设备) 跳过对应上传
+    # 步骤 14: 按硬件型号上传固件散文件目录为 artifact
+    # 每个型号一个独立 artifact, 下载后直接是各固件 bin, 便于单独取用
+    # 与 Release 附件 (tar.zst 整包) 形态不同: artifact 供挑文件, Release 供整包下载
+    # 型号目录不存在时 (.config 未启用该设备) 跳过对应上传
     # ----------------------------------------------------------
     - name: Upload firmware xiaomi_mi-router-ax3000t
       uses: actions/upload-artifact@main
-      if: steps.package_model.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t.tar.zst') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t/*') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_xiaomi_mi-router-ax3000t${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t.tar.zst
+        path: release/xiaomi_mi-router-ax3000t
 
     - name: Upload firmware xiaomi_mi-router-ax3000t-an8855
       uses: actions/upload-artifact@main
-      if: steps.package_model.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t-an8855.tar.zst') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t-an8855/*') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_xiaomi_mi-router-ax3000t-an8855${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t-an8855.tar.zst
+        path: release/xiaomi_mi-router-ax3000t-an8855
 
     - name: Upload firmware cmcc_rax3000m
       uses: actions/upload-artifact@main
-      if: steps.package_model.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m.tar.zst') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m/*') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_cmcc_rax3000m${{ env.FILE_DATE }}
-        path: release/cmcc_rax3000m.tar.zst
+        path: release/cmcc_rax3000m
 
     - name: Upload firmware cmcc_rax3000m-emmc
       uses: actions/upload-artifact@main
-      if: steps.package_model.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m-emmc.tar.zst') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m-emmc/*') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_cmcc_rax3000m-emmc${{ env.FILE_DATE }}
-        path: release/cmcc_rax3000m-emmc.tar.zst
+        path: release/cmcc_rax3000m-emmc
 
     # ----------------------------------------------------------
     # 步骤 15: 清理编译产物
