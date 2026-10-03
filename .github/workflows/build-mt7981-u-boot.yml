@@ -27,10 +27,6 @@ jobs:
     name: Build U-Boot
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write   # 允许创建 Release
-      actions: write    # 允许删除/管理 workflow runs
-
     # ----------------------------------------------------------
     # 矩阵策略: 定义需要编译的 board 列表
     # 每个 board 会在独立的 runner 上并行编译
@@ -145,7 +141,7 @@ jobs:
 
       # ----------------------------------------------------------
       # 步骤 6: 上传编译产物为 artifact
-      # 每个 board 的压缩包单独上传
+      # 每个 board 的压缩包单独上传, 由下方 release job 统一汇总发布
       # ----------------------------------------------------------
       - name: Upload U-Boot package
         uses: actions/upload-artifact@main
@@ -154,14 +150,47 @@ jobs:
           name: u-boot_${{ matrix.board }}${{ env.FILE_DATE }}
           path: release/${{ matrix.board }}.tar.zst
 
+  # ------------------------------------------------------------
+  # Release 发布 job
+  # 等待全部 board 编译完成后统一创建 Release,
+  # 避免 matrix 并行 job 各自调用 Release API 造成同 tag 重复建 Release
+  # ------------------------------------------------------------
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: needs.build.result == 'success' && !cancelled()
+
+    permissions:
+      contents: write   # 允许创建 Release
+      actions: write    # 允许删除/管理 workflow runs
+
+    steps:
+
       # ----------------------------------------------------------
-      # 步骤 7: 生成 Release 标签
+      # 步骤 1: 下载本次 run 的全部 artifact
+      # 不指定 name 时下载所有 artifact, 每个解压到以其名称命名的子目录
+      # ----------------------------------------------------------
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # ----------------------------------------------------------
+      # 步骤 2: 汇总各 board 压缩包到 release 目录
+      # ----------------------------------------------------------
+      - name: Organize release files
+        run: |
+          mkdir -p release
+          mv artifacts/*/*.tar.zst release/
+          ls -l release/
+
+      # ----------------------------------------------------------
+      # 步骤 3: 生成 Release 标签和说明
       # 标签格式: U-Boot_年.月.日-时分
-      # 注意: 多个 board 并行时共用同一时间标签，后完成的会覆盖
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
-        if: steps.package.outputs.status == 'success' && !cancelled()
         run: |
           echo "release_tag=U-Boot_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
@@ -169,7 +198,8 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 8: 上传 U-Boot 到 GitHub Release
+      # 步骤 4: 上传全部 U-Boot 压缩包到 GitHub Release
+      # 单一 job 创建 Release, 保证同 tag 只有一个 Release
       # ----------------------------------------------------------
       - name: Upload U-Boot to release
         id: release
@@ -178,12 +208,12 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
-          files: release/${{ matrix.board }}.tar.zst
+          files: release/*.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
+
       # ----------------------------------------------------------
-      # 步骤 9: 清理旧的 workflow runs
+      # 步骤 5: 清理旧的 workflow runs
       # 保留最近 7 天的运行记录，至少保留 3 条
       # ----------------------------------------------------------
       - name: Delete workflow runs
@@ -195,7 +225,7 @@ jobs:
           keep_minimum_runs: 3
 
       # ----------------------------------------------------------
-      # 步骤 10: 清理旧的 GitHub Releases
+      # 步骤 6: 清理旧的 GitHub Releases
       # 保留最近 3 个 Release，删除旧的 Release 及其 tag
       # ----------------------------------------------------------
       - name: Remove old Releases
