@@ -35,8 +35,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     permissions:
-      contents: write   # 允许创建 Release
-      actions: write    # 允许删除/管理 workflow runs
+      actions: write    # 允许上传编译产物 artifact
 
     steps:
     # ----------------------------------------------------------
@@ -223,67 +222,99 @@ jobs:
             --exclude='an7581/packages' \
             an7581
         echo "status=success" >> $GITHUB_OUTPUT
-        echo "FIRMWARE=$PWD/release" >> $GITHUB_ENV
 
     # ----------------------------------------------------------
-    # 步骤 15: 上传固件为 artifact
-    # 除 Release 外额外提供 artifact 下载入口, 便于排查与直接取用
+    # 步骤 15: 上传固件压缩包为 artifact
+    # artifact 内容即 tar.zst (与 Release 附件一致), 由下方 release job 统一发布
     # ----------------------------------------------------------
-    - name: Upload firmware directory
+    - name: Upload firmware package
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: PonWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE }}
+        path: release/*.tar.zst
 
-    # ----------------------------------------------------------
-    # 步骤 16: 生成 Release 标签和说明
-    # 标签格式: PonWrt_年.月.日-时分
-    # ----------------------------------------------------------
-    - name: Generate release tag
-      id: tag
-      if: steps.organize.outputs.status == 'success' && !cancelled()
-      run: |
-        echo "release_tag=PonWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        touch release.txt
-        echo "PonWrt for Nokia XG-040G-MD (Airoha AN7581)" >> release.txt
-        echo "status=success" >> $GITHUB_OUTPUT
+  # ------------------------------------------------------------
+  # Release 发布 job
+  # 编译完成后统一创建 Release, 与 MT7981 两个工作流结构保持一致
+  # ------------------------------------------------------------
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: needs.build.result == 'success' && !cancelled()
 
-    # ----------------------------------------------------------
-    # 步骤 17: 上传固件到 GitHub Release
-    # ----------------------------------------------------------
-    - name: Upload firmware to release
-      id: release
-      uses: softprops/action-gh-release@v3
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write   # 允许创建 Release
+      actions: write    # 允许删除/管理 workflow runs
 
-    # ----------------------------------------------------------
-    # 步骤 18: 清理旧的 workflow runs
-    # 保留最近 7 天的运行记录，至少保留 3 条
-    # ----------------------------------------------------------
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        token: ${{ github.token }}
-        repository: ${{ github.repository }}
-        retain_days: 7
-        keep_minimum_runs: 3
+    steps:
 
-    # ----------------------------------------------------------
-    # 步骤 19: 清理旧的 GitHub Releases
-    # 保留最近 3 个 Release，删除旧的 Release 及其 tag
-    # ----------------------------------------------------------
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@v0.3.4
-      if: steps.release.outputs.status == 'success' && !cancelled()
-      with:
-        keep_latest: 3
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # ----------------------------------------------------------
+      # 步骤 1: 下载本次 run 的全部 artifact
+      # 不指定 name 时下载所有 artifact, 每个解压到以其名称命名的子目录
+      # ----------------------------------------------------------
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # ----------------------------------------------------------
+      # 步骤 2: 汇总压缩包到 release 目录
+      # ----------------------------------------------------------
+      - name: Organize release files
+        run: |
+          mkdir -p release
+          mv artifacts/*/*.tar.zst release/
+          ls -l release/
+
+      # ----------------------------------------------------------
+      # 步骤 3: 生成 Release 标签和说明
+      # 标签格式: PonWrt_年.月.日-时分
+      # ----------------------------------------------------------
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "release_tag=PonWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          touch release.txt
+          echo "PonWrt for Nokia XG-040G-MD (Airoha AN7581)" >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------
+      # 步骤 4: 上传固件压缩包到 GitHub Release
+      # ----------------------------------------------------------
+      - name: Upload firmware to release
+        id: release
+        uses: softprops/action-gh-release@v3
+        if: steps.tag.outputs.status == 'success' && !cancelled()
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          body_path: release.txt
+          files: release/*.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------------
+      # 步骤 5: 清理旧的 workflow runs
+      # 保留最近 7 天的运行记录，至少保留 3 条
+      # ----------------------------------------------------------
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 3
+
+      # ----------------------------------------------------------
+      # 步骤 6: 清理旧的 GitHub Releases
+      # 保留最近 3 个 Release，删除旧的 Release 及其 tag
+      # ----------------------------------------------------------
+      - name: Remove old Releases
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        if: steps.release.outputs.status == 'success' && !cancelled()
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
