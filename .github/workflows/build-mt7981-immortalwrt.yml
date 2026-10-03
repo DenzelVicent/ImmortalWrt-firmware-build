@@ -215,7 +215,7 @@ jobs:
     # 型号目录不存在时 (.config 未启用该设备) 跳过
     # ----------------------------------------------------------
     - name: Package firmware by model
-      id: package
+      id: package_model
       if: steps.organize.outputs.status == 'success' && !cancelled()
       run: |
         cd "$GITHUB_WORKSPACE/release"
@@ -284,7 +284,7 @@ jobs:
     - name: Upload firmware to release
       id: release
       uses: softprops/action-gh-release@v3
-      if: steps.package.outputs.status == 'success' && !cancelled()
+      if: steps.package_model.outputs.status == 'success' && !cancelled()
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
