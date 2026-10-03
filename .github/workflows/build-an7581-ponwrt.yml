@@ -217,7 +217,8 @@ jobs:
       if: (!cancelled())
       run: |
         mkdir -p release
-        tar --zstd -cf release/ponwrt-an7581.tar.zst \
+        device="${DEVICE_NAME#_}"
+        tar --zstd -cf "release/ponwrt-${device}.tar.zst" \
             -C openwrt/bin/targets/airoha \
             --exclude='an7581/packages' \
             an7581
