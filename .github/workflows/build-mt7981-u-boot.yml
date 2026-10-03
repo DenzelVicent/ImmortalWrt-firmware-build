@@ -130,28 +130,16 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 5: 按 board 打包编译产物为独立压缩包
-      # 每个 matrix job 只编译一个 board, 将其 output 目录打包为 tar.zst
+      # 步骤 5: 上传编译产物散文件目录为 artifact
+      # 每个 board 的 output 目录原样单独上传, 便于单独取用文件
+      # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
       # ----------------------------------------------------------
-      - name: Package U-Boot by board
-        id: package
-        if: steps.compile.outputs.status == 'success' && !cancelled()
-        run: |
-          mkdir -p release
-          tar --zstd -cf "release/${{ matrix.board }}.tar.zst" -C u-boot/output .
-          echo "Packaged ${{ matrix.board }} -> release/${{ matrix.board }}.tar.zst"
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      # ----------------------------------------------------------
-      # 步骤 6: 上传编译产物为 artifact
-      # 每个 board 的压缩包单独上传, 由下方 release job 统一汇总发布
-      # ----------------------------------------------------------
-      - name: Upload U-Boot package
+      - name: Upload U-Boot output
         uses: actions/upload-artifact@main
-        if: steps.package.outputs.status == 'success' && !cancelled()
+        if: steps.compile.outputs.status == 'success' && !cancelled()
         with:
           name: u-boot_${{ matrix.board }}${{ env.FILE_DATE }}
-          path: release/${{ matrix.board }}.tar.zst
+          path: u-boot/output
 
   # ------------------------------------------------------------
   # Release 发布 job
@@ -180,12 +168,19 @@ jobs:
           path: artifacts
 
       # ----------------------------------------------------------
-      # 步骤 2: 汇总各 board 压缩包到 release 目录
+      # 步骤 2: 将各 board 散文件目录打包为 tar.zst 汇总到 release 目录
+      # artifact 名格式 u-boot_<board>_<日期>, 从中反解 board 名
       # ----------------------------------------------------------
-      - name: Organize release files
+      - name: Package U-Boot by board
         run: |
           mkdir -p release
-          mv artifacts/*/*.tar.zst release/
+          for d in artifacts/*/; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            board="$(echo "$name" | sed -E 's/^u-boot_//; s/_[0-9]{12}$//')"
+            tar --zstd -cf "release/${board}.tar.zst" -C "$d" .
+            echo "Packaged $board -> release/${board}.tar.zst"
+          done
           ls -l release/
 
       # ----------------------------------------------------------

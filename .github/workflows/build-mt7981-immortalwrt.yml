@@ -208,27 +208,10 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 13: 按硬件型号压缩固件为独立归档文件
-    # 每个型号目录打包为一个 tar.zst, 供 Release 下载
-    # 型号目录不存在时 (.config 未启用该设备) 跳过
-    # ----------------------------------------------------------
-    - name: Package firmware by model
-      id: package_model
-      if: steps.organize.outputs.status == 'success' && !cancelled()
-      run: |
-        cd "$GITHUB_WORKSPACE/release"
-        for model_dir in */; do
-          [ -d "$model_dir" ] || continue
-          model="${model_dir%/}"
-          tar --zstd -cf "${model}.tar.zst" -C "$model_dir" .
-          echo "Packaged $model -> ${model}.tar.zst"
-        done
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    # ----------------------------------------------------------
-    # 步骤 14: 按硬件型号上传固件散文件目录为 artifact
+    # 步骤 13: 按硬件型号上传固件散文件目录为 artifact
     # 每个型号一个独立 artifact, 下载后直接是各固件 bin, 便于单独取用
     # 与 Release 附件 (tar.zst 整包) 形态不同: artifact 供挑文件, Release 供整包下载
+    # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
     # 型号目录不存在时 (.config 未启用该设备) 跳过对应上传
     # ----------------------------------------------------------
     - name: Upload firmware xiaomi_mi-router-ax3000t
@@ -260,7 +243,7 @@ jobs:
         path: release/cmcc_rax3000m-emmc
 
     # ----------------------------------------------------------
-    # 步骤 15: 清理编译产物
+    # 步骤 14: 清理编译产物
     # make clean 清除编译中间文件，为缓存做准备
     # ----------------------------------------------------------
     - name: Clean Compile
@@ -270,7 +253,7 @@ jobs:
         make clean
 
     # ----------------------------------------------------------
-    # 步骤 16: 缓存编译目录
+    # 步骤 15: 缓存编译目录
     # 缓存 openwrt 目录，下次编译可复用已编译的依赖
     # 缓存 key 基于 feeds.conf.default 的哈希值
     # ----------------------------------------------------------
@@ -308,12 +291,19 @@ jobs:
           path: artifacts
 
       # ----------------------------------------------------------
-      # 步骤 2: 汇总各型号压缩包到 release 目录
+      # 步骤 2: 将各型号散文件目录打包为 tar.zst 汇总到 release 目录
+      # artifact 名格式 ImmortalWrt_firmware_<型号>_<日期>, 从中反解型号名
       # ----------------------------------------------------------
-      - name: Organize release files
+      - name: Package firmware by model
         run: |
           mkdir -p release
-          mv artifacts/*/*.tar.zst release/
+          for d in artifacts/*/; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            model="$(echo "$name" | sed -E 's/^ImmortalWrt_firmware_//; s/_[0-9]{12}$//')"
+            tar --zstd -cf "release/${model}.tar.zst" -C "$d" .
+            echo "Packaged $model -> release/${model}.tar.zst"
+          done
           ls -l release/
 
       # ----------------------------------------------------------
