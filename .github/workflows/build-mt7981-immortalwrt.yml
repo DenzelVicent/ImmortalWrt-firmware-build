@@ -34,8 +34,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     permissions:
-      contents: write   # 允许创建 Release
-      actions: write    # 允许删除/管理 workflow runs
+      actions: write    # 允许上传 artifact 与保存编译缓存
 
     steps:
     # ----------------------------------------------------------
@@ -206,7 +205,6 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/release/$model"
           mv "$f" "$GITHUB_WORKSPACE/release/$model/"
         done
-        echo "FIRMWARE=$GITHUB_WORKSPACE/release" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
@@ -228,72 +226,40 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 14: 按硬件型号上传固件为 artifact
-    # 每个型号一个独立 artifact (下载即对应压缩包), 不合并为单一目录
-    # 型号目录不存在时 (.config 未启用该设备) 跳过对应上传
+    # 步骤 14: 按硬件型号上传固件压缩包为 artifact
+    # 每个型号一个独立 artifact (下载即对应 tar.zst), 与 Release 附件一致
+    # 压缩包不存在时 (.config 未启用该设备) 跳过对应上传
     # ----------------------------------------------------------
     - name: Upload firmware xiaomi_mi-router-ax3000t
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t/*') != '' && !cancelled()
+      if: steps.package_model.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t.tar.zst') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_xiaomi_mi-router-ax3000t${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t
+        path: release/xiaomi_mi-router-ax3000t.tar.zst
 
     - name: Upload firmware xiaomi_mi-router-ax3000t-an8855
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t-an8855/*') != '' && !cancelled()
+      if: steps.package_model.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t-an8855.tar.zst') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_xiaomi_mi-router-ax3000t-an8855${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t-an8855
+        path: release/xiaomi_mi-router-ax3000t-an8855.tar.zst
 
     - name: Upload firmware cmcc_rax3000m
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m/*') != '' && !cancelled()
+      if: steps.package_model.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m.tar.zst') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_cmcc_rax3000m${{ env.FILE_DATE }}
-        path: release/cmcc_rax3000m
+        path: release/cmcc_rax3000m.tar.zst
 
     - name: Upload firmware cmcc_rax3000m-emmc
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m-emmc/*') != '' && !cancelled()
+      if: steps.package_model.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m-emmc.tar.zst') != '' && !cancelled()
       with:
         name: ImmortalWrt_firmware_cmcc_rax3000m-emmc${{ env.FILE_DATE }}
-        path: release/cmcc_rax3000m-emmc
+        path: release/cmcc_rax3000m-emmc.tar.zst
 
     # ----------------------------------------------------------
-    # 步骤 15: 生成 Release 标签和说明
-    # 标签格式: ImmortalWrt_年。月.日 - 时分
-    # ----------------------------------------------------------
-    - name: Generate release tag
-      id: tag
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        echo "release_tag=ImmortalWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        touch release.txt
-        echo "ImmortalWrt for Xiaomi AX3000T & CMCC RAX3000M" >> release.txt
-        echo "" >> release.txt
-        echo "Supported devices:" >> release.txt
-        echo "- Xiaomi Mi Router AX3000T (standard / stock / AN8855)" >> release.txt
-        echo "- CMCC RAX3000M (SPI-NAND / eMMC)" >> release.txt
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    # ----------------------------------------------------------
-    # 步骤 16: 上传固件到 GitHub Release
-    # 上传按型号打包的 tar.zst 归档文件 (每个型号一个压缩包)
-    # ----------------------------------------------------------
-    - name: Upload firmware to release
-      id: release
-      uses: softprops/action-gh-release@v3
-      if: steps.package_model.outputs.status == 'success' && !cancelled()
-      with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*.tar.zst
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    # ----------------------------------------------------------
-    # 步骤 17: 清理编译产物
+    # 步骤 15: 清理编译产物
     # make clean 清除编译中间文件，为缓存做准备
     # ----------------------------------------------------------
     - name: Clean Compile
@@ -303,7 +269,7 @@ jobs:
         make clean
 
     # ----------------------------------------------------------
-    # 步骤 18: 缓存编译目录
+    # 步骤 16: 缓存编译目录
     # 缓存 openwrt 目录，下次编译可复用已编译的依赖
     # 缓存 key 基于 feeds.conf.default 的哈希值
     # ----------------------------------------------------------
@@ -315,27 +281,91 @@ jobs:
         path: openwrt
         key: ${{ runner.os }}-openwrt-${{ hashFiles('openwrt/feeds.conf.default') }}
 
-    # ----------------------------------------------------------
-    # 步骤 19: 清理旧的 workflow runs
-    # 保留最近 7 天的运行记录，至少保留 3 条
-    # ----------------------------------------------------------
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        token: ${{ github.token }}
-        repository: ${{ github.repository }}
-        retain_days: 7
-        keep_minimum_runs: 3
+  # ------------------------------------------------------------
+  # Release 发布 job
+  # 编译完成后统一创建 Release, 与 U-Boot 工作流结构保持一致
+  # ------------------------------------------------------------
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: needs.build.result == 'success' && !cancelled()
 
-    # ----------------------------------------------------------
-    # 步骤 20: 清理旧的 GitHub Releases
-    # 保留最近 3 个 Release，删除旧的 Release 及其 tag
-    # ----------------------------------------------------------
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@v0.3.4
-      if: steps.release.outputs.status == 'success' && !cancelled()
-      with:
-        keep_latest: 3
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write   # 允许创建 Release
+      actions: write    # 允许删除/管理 workflow runs
+
+    steps:
+
+      # ----------------------------------------------------------
+      # 步骤 1: 下载本次 run 的全部 artifact
+      # 不指定 name 时下载所有 artifact, 每个解压到以其名称命名的子目录
+      # ----------------------------------------------------------
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # ----------------------------------------------------------
+      # 步骤 2: 汇总各型号压缩包到 release 目录
+      # ----------------------------------------------------------
+      - name: Organize release files
+        run: |
+          mkdir -p release
+          mv artifacts/*/*.tar.zst release/
+          ls -l release/
+
+      # ----------------------------------------------------------
+      # 步骤 3: 生成 Release 标签和说明
+      # 标签格式: ImmortalWrt_年.月.日-时分
+      # ----------------------------------------------------------
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "release_tag=ImmortalWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          touch release.txt
+          echo "ImmortalWrt for Xiaomi AX3000T & CMCC RAX3000M" >> release.txt
+          echo "" >> release.txt
+          echo "Supported devices:" >> release.txt
+          echo "- Xiaomi Mi Router AX3000T (standard / stock / AN8855)" >> release.txt
+          echo "- CMCC RAX3000M (SPI-NAND / eMMC)" >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------
+      # 步骤 4: 上传全部固件压缩包到 GitHub Release
+      # ----------------------------------------------------------
+      - name: Upload firmware to release
+        id: release
+        uses: softprops/action-gh-release@v3
+        if: steps.tag.outputs.status == 'success' && !cancelled()
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          body_path: release.txt
+          files: release/*.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------------
+      # 步骤 5: 清理旧的 workflow runs
+      # 保留最近 7 天的运行记录，至少保留 3 条
+      # ----------------------------------------------------------
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 3
+
+      # ----------------------------------------------------------
+      # 步骤 6: 清理旧的 GitHub Releases
+      # 保留最近 3 个 Release，删除旧的 Release 及其 tag
+      # ----------------------------------------------------------
+      - name: Remove old Releases
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        if: steps.release.outputs.status == 'success' && !cancelled()
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
