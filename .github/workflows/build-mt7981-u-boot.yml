@@ -130,7 +130,18 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 5: 上传编译产物散文件目录为 artifact
+      # 步骤 5: 清理编译输出
+      # 上游 build.sh 只向 output 放 fip/bl2 两个可刷写镜像 (*.bin),
+      # 此处统一只保留 *.bin, 防止上游日后新增中间文件混入产物
+      # ----------------------------------------------------------
+      - name: Clean U-Boot output
+        if: steps.compile.outputs.status == 'success' && !cancelled()
+        run: |
+          find u-boot/output -type f ! -name '*.bin' -delete
+          ls -l u-boot/output
+
+      # ----------------------------------------------------------
+      # 步骤 6: 上传编译产物散文件目录为 artifact
       # 每个 board 的 output 目录原样单独上传, 便于单独取用文件
       # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
       # ----------------------------------------------------------
@@ -170,6 +181,7 @@ jobs:
       # ----------------------------------------------------------
       # 步骤 2: 将各 board 散文件目录打包为 tar.zst 汇总到 release 目录
       # artifact 名格式 u-boot_<board>_<日期>, 从中反解 board 名
+      # 附件名加 -uboot 后缀, 与同名的 ImmortalWrt 固件包区分
       # ----------------------------------------------------------
       - name: Package U-Boot by board
         run: |
@@ -178,8 +190,8 @@ jobs:
             [ -d "$d" ] || continue
             name="$(basename "$d")"
             board="$(echo "$name" | sed -E 's/^u-boot_//; s/_[0-9]{12}$//')"
-            tar --zstd -cf "release/${board}.tar.zst" -C "$d" .
-            echo "Packaged $board -> release/${board}.tar.zst"
+            tar --zstd -cf "release/${board}-uboot.tar.zst" -C "$d" .
+            echo "Packaged $board -> release/${board}-uboot.tar.zst"
           done
           ls -l release/
 
