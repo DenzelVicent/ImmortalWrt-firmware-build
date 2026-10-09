@@ -1,11 +1,11 @@
 # ============================================================
-# PonWrt 固件编译工作流
+# ImmortalWrt 固件编译工作流
 # 支持机型: Nokia XG-040G-MD (Airoha AN7581 平台)
 # 源码来源: https://github.com/DenzelVicent/ponwrt.git
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
-name: Build PonWrt Firmware (AN7581)
+name: Build ImmortalWrt Firmware (AN7581)
 on:
   # 定时编译 (默认关闭，取消注释即可启用，cron 使用 UTC 时间)
   # schedule:
@@ -62,7 +62,7 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 3: 安装编译依赖
-    # PonWrt 基于较新的 ImmortalWrt，需要 ubuntu-24.04 和完整工具链
+    # ImmortalWrt 需要 ubuntu-24.04 和完整工具链
     # ----------------------------------------------------------
     - name: Install build dependencies
       env:
@@ -86,7 +86,7 @@ jobs:
         sudo chown $USER:$GROUPS /srcdir
 
     # ----------------------------------------------------------
-    # 步骤 4: 克隆 PonWrt 源码
+    # 步骤 4: 克隆 ImmortalWrt 源码
     # 将源码克隆到 /srcdir 以获得更大的磁盘空间
     # 并通过软链接关联到工作区
     # ----------------------------------------------------------
@@ -107,9 +107,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openwrt/dl
-        key: ponwrt-dl-${{ hashFiles('feeds.conf.default', '.config') }}
+        key: immortalwrt-dl-${{ hashFiles('feeds.conf.default', '.config') }}
         restore-keys: |
-          ponwrt-dl-
+          immortalwrt-dl-
 
     # ----------------------------------------------------------
     # 步骤 6: 加载自定义 feeds 源
@@ -234,7 +234,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: PonWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ImmortalWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: release/${{ env.DEVICE }}
 
   # ------------------------------------------------------------
@@ -264,8 +264,8 @@ jobs:
 
       # ----------------------------------------------------------
       # 步骤 2: 将设备散文件目录打包为 tar.zst 汇总到 release 目录
-      # artifact 名格式 PonWrt_firmware_<设备>_<日期>, 从中反解设备名
-      # 压缩包名沿用上游形态 ponwrt-<设备>.tar.zst
+      # artifact 名格式 ImmortalWrt_firmware_<设备>_<日期>, 从中反解设备名
+      # 压缩包名沿用上游形态 immortalwrt-<设备>.tar.zst
       # ----------------------------------------------------------
       - name: Package firmware by device
         run: |
@@ -273,22 +273,22 @@ jobs:
           for d in artifacts/*/; do
             [ -d "$d" ] || continue
             name="$(basename "$d")"
-            device="$(echo "$name" | sed -E 's/^PonWrt_firmware_//; s/_[0-9]{12}$//')"
-            tar --zstd -cf "release/ponwrt-${device}.tar.zst" -C "$d" .
-            echo "Packaged $device -> release/ponwrt-${device}.tar.zst"
+            device="$(echo "$name" | sed -E 's/^ImmortalWrt_firmware_//; s/_[0-9]{12}$//')"
+            tar --zstd -cf "release/immortalwrt-${device}.tar.zst" -C "$d" .
+            echo "Packaged $device -> release/immortalwrt-${device}.tar.zst"
           done
           ls -l release/
 
       # ----------------------------------------------------------
       # 步骤 3: 生成 Release 标签和说明
-      # 标签格式: PonWrt_年.月.日-时分
+      # 标签格式: ImmortalWrt_年.月.日-时分
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
         run: |
-          echo "release_tag=PonWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          echo "release_tag=ImmortalWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "PonWrt for Nokia XG-040G-MD (Airoha AN7581)" >> release.txt
+          echo "ImmortalWrt for Nokia XG-040G-MD (Airoha AN7581)" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
