@@ -1,12 +1,12 @@
-# PonWrt 固件云编译 (Airoha AN7581)
+# ImmortalWrt 固件云编译 (Airoha AN7581)
 
-> 源码：[PonWrt](https://github.com/pbs05/ponwrt) | 基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt)
+> 源码：[ImmortalWrt](https://github.com/DenzelVicent/ponwrt) | 基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt)
 
-本仓库用于云编译 PonWrt 固件，当前编译目标为 Nokia XG-040G-MD (Airoha AN7581 平台)。
+本仓库用于云编译 ImmortalWrt 固件，当前编译目标为 Nokia XG-040G-MD (Airoha AN7581 平台)。
 
 ## 免责声明
 
-PonWrt 是一个用于研究和开发的开源光猫固件项目。
+ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 
 刷写固件或修改 PON 相关配置存在风险，可能导致设备无法启动、配置或设备数据丢失、PON 无法注册等问题。操作前请务必备份原厂固件及设备相关数据。
 
@@ -94,7 +94,7 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 
 ```
 ├── .github/workflows/
-│   └── build-ponwrt.yml        # GitHub Actions 编译工作流
+│   └── build-an7581-immortalwrt.yml  # GitHub Actions 编译工作流
 ├── configs/
 │   └── an7581.config           # AN7581 平台完整配置 (本地编译参考)
 ├── .config                     # 设备专用编译配置 (云编译用)
@@ -133,7 +133,7 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 1. 释放 Runner 磁盘空间 (约 6GB)
 2. 检出本仓库配置文件与脚本
 3. 安装编译依赖工具链
-4. 克隆 PonWrt 源码到 `/srcdir` (更大磁盘)
+4. 克隆 ImmortalWrt 源码到 `/srcdir` (更大磁盘)
 5. 缓存 `dl/` 下载目录 (按配置哈希，加速重复构建)
 6. 覆盖 feeds 源，执行 `before-update-custom.sh`
 7. 更新并安装 feeds
@@ -154,7 +154,7 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 
 - 修改 `.config` 调整软件包和内核模块
 - 修改 `after-update-custom.sh` 自定义默认 IP、DHCP 等
-- 修改 `.github/workflows/build-ponwrt.yml` 的 `env` 段切换设备或源码分支
+- 修改 `.github/workflows/build-an7581-immortalwrt.yml` 的 `env` 段切换设备或源码分支
 
 ## 本地编译
 
@@ -163,7 +163,7 @@ PonWrt 是一个用于研究和开发的开源光猫固件项目。
 sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
 # 拉取源码
-git clone https://github.com/pbs05/ponwrt.git
+git clone https://github.com/DenzelVicent/ponwrt.git
 cd ponwrt
 
 # 更新并安装 feeds
@@ -185,4 +185,4 @@ make -j$(nproc)
 
 使用 [AN758x-Stock2UBI](https://github.com/pbs05/an758x-stock2ubi) 备份原厂闪存并安装 UBI 布局。启动镜像和 Web 恢复界面由 [AN758x U-Boot](https://github.com/pbs05/uboot-an758x) 提供。
 
-刷入 PonWrt 后，通过 U-Boot Web 或 LuCI 的"网络 → PON → 配置 → PON board data"恢复原厂校准和身份数据。烽火 `factory` 需要先使用 [FiberHome Factory](https://github.com/pbs05/fiberhome-factory) 转换；转换后的烽火数据、`reservearea` 和 `dsd` 写入 PonWrt 的 `factory` 卷；Nokia 的 `bosa` 和 `ri` 写入同名卷。
+刷入 ImmortalWrt 后，通过 U-Boot Web 或 LuCI 的"网络 → PON → 配置 → PON board data"恢复原厂校准和身份数据。烽火 `factory` 需要先使用 [FiberHome Factory](https://github.com/pbs05/fiberhome-factory) 转换；转换后的烽火数据、`reservearea` 和 `dsd` 写入 PonWrt 的 `factory` 卷；Nokia 的 `bosa` 和 `ri` 写入同名卷。
