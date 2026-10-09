@@ -1,7 +1,7 @@
 # ============================================================
 # PonWrt 固件编译工作流
 # 支持机型: Nokia XG-040G-MD (Airoha AN7581 平台)
-# 源码来源: https://github.com/pbs05/ponwrt.git
+# 源码来源: https://github.com/DenzelVicent/ponwrt.git
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 env:
-  # 源码仓库地址 (pbs05 的 PonWrt 项目)
-  REPO_URL: https://github.com/pbs05/ponwrt.git
+  # 源码仓库地址
+  REPO_URL: https://github.com/DenzelVicent/ponwrt.git
   # 源码分支
   REPO_BRANCH: master
   # 自定义固件配置文件 (OpenWrt make menuconfig 生成的 .config)
