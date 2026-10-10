@@ -11,8 +11,10 @@
 # echo "src-git kenzo https://github.com/kenzok8/openwrt-packages" >> ./feeds.conf.default   
 # echo "src-git small https://github.com/kenzok8/small" >> ./feeds.conf.default
 
-# Add Lucky feed (IPv6 端口转发/DDNS/公网访问)
-echo 'src-git lucky https://github.com/gdy666/luci-app-lucky.git' >> feeds.conf.default
+# Add Lucky package (IPv6 端口转发/DDNS/公网访问)
+# 该仓库不是标准 feed 格式，直接克隆到 package 目录
+git clone https://github.com/gdy666/luci-app-lucky.git package/lucky
 
-# Add Airoha NPU feed (AN7581 NPU 管理界面)
-echo 'src-git airoha-npu https://github.com/luanmuc/luci-app-airoha-npu.git' >> feeds.conf.default
+# Add Airoha NPU package (AN7581 NPU 管理界面)
+# 该仓库不是标准 feed 格式，直接克隆到 package 目录
+git clone https://github.com/luanmuc/luci-app-airoha-npu.git package/airoha-npu
