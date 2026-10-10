@@ -138,6 +138,27 @@ jobs:
       run: cd openwrt && ./scripts/feeds install -a
 
     # ----------------------------------------------------------
+    # 步骤 8.5: 克隆第三方包 (非 feed 格式)
+    # 必须在 feeds install 之后: 此时 luci-base 等 feed 包已安装为符号链接,
+    # 后续 make defconfig 才能正确解析 +luci-base 等运行时依赖
+    # ----------------------------------------------------------
+    - name: Clone custom packages
+      working-directory: openwrt
+      run: |
+        # Lucky (IPv6 端口转发/DDNS/公网访问)
+        git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/lucky || {
+            echo "::warning::luci-app-lucky 克隆失败，该插件将不会包含在固件中"
+        }
+        # Airoha NPU 管理界面 (AN7581 平台专用)
+        git clone --depth 1 https://github.com/luanmuc/luci-app-airoha-npu.git package/airoha-npu || {
+            echo "::error::luci-app-airoha-npu 克隆失败，NPU 管理界面将不会包含在固件中"
+        }
+        echo "=== 第三方包目录检查 ==="
+        for d in package/lucky package/airoha-npu; do
+            [ -d "$d" ] && echo "[OK] $d" || echo "[MISSING] $d"
+        done
+
+    # ----------------------------------------------------------
     # 步骤 9: 加载仓库签名密钥 (APK)
     # 用于对编译产物的软件包进行签名验证
     # 需在仓库 Settings → Secrets 中配置 PONWRT_APK_PRIVATE_KEY
