@@ -13,4 +13,4 @@
 
 # Add Lucky package (IPv6 端口转发/DDNS/公网访问)
 # 该仓库不是标准 feed 格式，直接克隆到 package 目录
-git clone https://github.com/gdy666/luci-app-lucky.git package/lucky
+git clone https://github.com/gdy666/luci-app-lucky.git package/luci-app-lucky
