@@ -1,0 +1,136 @@
+# ============================================================
+# luci-app-airoha-npu 独立编译工作流
+# 使用 ImmortalWrt SDK 单独编译 APK 安装包，无需编译完整固件
+# 产物: bin/packages/aarch64/luci/luci-app-airoha-npu_*.apk
+# ============================================================
+
+name: Build luci-app-airoha-npu (APK)
+on:
+  workflow_dispatch:
+    inputs:
+      app_repo:
+        description: "App 仓库地址"
+        required: true
+        default: "https://github.com/DenzelVicent/luci-app-airoha-npu.git"
+      app_branch:
+        description: "App 分支"
+        required: true
+        default: "main"
+      sdk_url:
+        description: "SDK 下载地址 (留空使用默认 snapshot)"
+        required: false
+        default: ""
+
+env:
+  TZ: Asia/Shanghai
+  DEFAULT_SDK_URL: https://downloads.immortalwrt.org/snapshots/targets/airoha/an7581/immortalwrt-sdk-airoha-an7581_gcc-14.4.0_musl.Linux-x86_64.tar.zst
+
+jobs:
+  build-apk:
+    name: 编译 APK 安装包
+    runs-on: ubuntu-24.04
+
+    permissions:
+      actions: write
+
+    steps:
+      # ----------------------------------------------------------
+      # 步骤 1: 准备编译环境
+      # ----------------------------------------------------------
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zstd
+
+      # ----------------------------------------------------------
+      # 步骤 2: 下载并解压 SDK
+      # ----------------------------------------------------------
+      - name: 下载 ImmortalWrt SDK
+        env:
+          INPUT_SDK_URL: ${{ github.event.inputs.sdk_url }}
+        run: |
+          SDK_URL="${INPUT_SDK_URL:-$DEFAULT_SDK_URL}"
+          # 校验 URL 格式，防止注入
+          if ! echo "$SDK_URL" | grep -qE '^https://[a-zA-Z0-9._/-]+$'; then
+            echo "❌ SDK URL 格式无效: $SDK_URL"
+            exit 1
+          fi
+          echo "SDK 地址: $SDK_URL"
+          wget -q --show-progress "$SDK_URL" -O sdk.tar.zst
+
+      - name: 解压 SDK
+        run: |
+          mkdir -p sdk
+          tar --use-compress-program=unzstd -xf sdk.tar.zst -C sdk --strip-components=1
+          echo "SDK 目录内容:"
+          ls -la sdk/
+
+      # ----------------------------------------------------------
+      # 步骤 3: 配置 feeds 并克隆 App
+      # ----------------------------------------------------------
+      - name: 更新 feeds
+        working-directory: sdk
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 克隆 luci-app-airoha-npu
+        working-directory: sdk
+        env:
+          INPUT_APP_REPO: ${{ github.event.inputs.app_repo }}
+          INPUT_APP_BRANCH: ${{ github.event.inputs.app_branch }}
+        run: |
+          # 校验输入格式
+          if ! echo "$INPUT_APP_REPO" | grep -qE '^https://[a-zA-Z0-9._/-]+\.git$'; then
+            echo "❌ App 仓库地址格式无效: $INPUT_APP_REPO"
+            exit 1
+          fi
+          if ! echo "$INPUT_APP_BRANCH" | grep -qE '^[a-zA-Z0-9._/-]+$'; then
+            echo "❌ App 分支名格式无效: $INPUT_APP_BRANCH"
+            exit 1
+          fi
+          git clone --depth 1 -b "$INPUT_APP_BRANCH" \
+            "$INPUT_APP_REPO" \
+            package/luci-app-airoha-npu
+          echo "=== 包目录检查 ==="
+          ls -la package/luci-app-airoha-npu/
+
+      # ----------------------------------------------------------
+      # 步骤 4: 编译 APK
+      # ----------------------------------------------------------
+      - name: 编译 luci-app-airoha-npu
+        working-directory: sdk
+        run: |
+          make package/luci-app-airoha-npu/compile V=s -j$(nproc)
+
+      # ----------------------------------------------------------
+      # 步骤 5: 上传产物
+      # ----------------------------------------------------------
+      - name: 收集 APK 文件
+        id: collect
+        run: |
+          mkdir -p output
+          find sdk/bin -name "luci-app-airoha-npu*.apk" -exec cp {} output/ \;
+          find sdk/bin -name "luci-app-airoha-npu*.ipk" -exec cp {} output/ \; 2>/dev/null || true
+          echo "=== 产物列表 ==="
+          ls -lh output/
+          COUNT=$(ls output/*.apk 2>/dev/null | wc -l)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: 上传 APK 到 Actions Artifact
+        if: steps.collect.outputs.count > 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-airoha-npu-apk
+          path: output/*.apk
+          retention-days: 30
+
+      - name: 编译结果
+        run: |
+          if [ "${{ steps.collect.outputs.count }}" -gt 0 ]; then
+            echo "✅ 编译成功！"
+            echo "下载 Actions Artifact 中的 luci-app-airoha-npu-apk 即可"
+          else
+            echo "❌ 未找到 APK 产物，请检查编译日志"
+            exit 1
+          fi
