@@ -150,7 +150,7 @@ jobs:
             echo "::warning::luci-app-lucky 克隆失败，该插件将不会包含在固件中"
         }
         # Airoha NPU 管理界面 (AN7581 平台专用)
-        git clone --depth 1 https://github.com/luanmuc/luci-app-airoha-npu.git package/luci-app-airoha-npu || {
+        git clone --depth 1 https://github.com/DenzelVicent/luci-app-airoha-npu.git package/luci-app-airoha-npu || {
             echo "::error::luci-app-airoha-npu 克隆失败，NPU 管理界面将不会包含在固件中"
         }
         echo "=== 第三方包目录检查 ==="
