@@ -11,7 +11,8 @@ on:
 
 env:
   REPO_URL: https://github.com/DenzelVicent/ponwrt.git
-  REPO_BRANCH: master
+  # 须与 GPON 固件源码分支一致, 否则 kmod 与固件内核 ABI 不匹配
+  REPO_BRANCH: gpon-test
   CONFIG_FILE: .config
   SELF_BEFORE_SH: before-update-custom.sh
   SELF_AFTER_SH: after-update-custom.sh

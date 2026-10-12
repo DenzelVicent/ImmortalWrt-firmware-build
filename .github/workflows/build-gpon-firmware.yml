@@ -16,8 +16,8 @@ on:
 env:
   # 源码仓库地址
   REPO_URL: https://github.com/DenzelVicent/ponwrt.git
-  # 源码分支
-  REPO_BRANCH: master
+  # 源码分支 (GPON 相关内核 patch 仅存在于 ponwrt 的 gpon-test 分支)
+  REPO_BRANCH: gpon-test
   # 自定义固件配置文件 (OpenWrt make menuconfig 生成的 .config)
   CONFIG_FILE: .config
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
