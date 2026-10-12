@@ -163,26 +163,23 @@ jobs:
         make target/linux/compile -j$(nproc) V=s || \
         make target/linux/compile -j1 V=s || exit 1
         echo "=== 编译 kmod-airoha-xpon ==="
-        make package/feeds/pon_drivers/kmod-airoha-xpon/compile -j$(nproc) V=s || \
-        make package/feeds/pon_drivers/kmod-airoha-xpon/compile -j1 V=s || exit 1
+        make package/feeds/pon_drivers/airoha-xpon/compile -j$(nproc) V=s || \
+        make package/feeds/pon_drivers/airoha-xpon/compile -j1 V=s || exit 1
         echo "=== 编译 kmod-airoha-pon-frontend ==="
-        make package/feeds/pon_drivers/kmod-airoha-pon-frontend/compile -j$(nproc) V=s || \
-        make package/feeds/pon_drivers/kmod-airoha-pon-frontend/compile -j1 V=s || exit 1
+        make package/feeds/pon_drivers/airoha-pon-frontends/compile -j$(nproc) V=s || \
+        make package/feeds/pon_drivers/airoha-pon-frontends/compile -j1 V=s || exit 1
         echo "=== 编译 airoha-ponctl ==="
         make package/feeds/pon_userspace/airoha-ponctl/compile -j$(nproc) V=s || \
         make package/feeds/pon_userspace/airoha-ponctl/compile -j1 V=s || exit 1
         echo "=== 编译 airoha-pond ==="
-        make package/feeds/pon_userspace/airoha-pond/compile -j$(nproc) V=s || \
-        make package/feeds/pon_userspace/airoha-pond/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-pon-daemons/compile -j$(nproc) V=s || \
+        make package/feeds/pon_userspace/airoha-pon-daemons/compile -j1 V=s || exit 1
         echo "=== 编译 airoha-pon-debug ==="
         make package/feeds/pon_userspace/airoha-pon-debug/compile -j$(nproc) V=s || \
         make package/feeds/pon_userspace/airoha-pon-debug/compile -j1 V=s || exit 1
-        echo "=== 编译 luci-app-pon ==="
+        echo "=== 编译 luci-app-pon (含 zh-cn 翻译) ==="
         make package/feeds/pon_userspace/luci-app-pon/compile -j$(nproc) V=s || \
         make package/feeds/pon_userspace/luci-app-pon/compile -j1 V=s || exit 1
-        echo "=== 编译 luci-i18n-pon-zh-cn ==="
-        make package/feeds/pon_userspace/luci-i18n-pon-zh-cn/compile -j$(nproc) V=s || \
-        make package/feeds/pon_userspace/luci-i18n-pon-zh-cn/compile -j1 V=s || exit 1
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
@@ -192,30 +189,35 @@ jobs:
       id: collect
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
-        mkdir -p release/pon-packages
+        # 清除旧包, 只保留本次编译产物
+        find pon-packages/ -name "*.apk" -delete 2>/dev/null || true
+        mkdir -p pon-packages
         # 从 bin/packages/ 和 bin/targets/ 收集 PON 相关 .apk
         find openwrt/bin/ -name "*.apk" | while read f; do
           name=$(basename "$f")
           case "$name" in
             *airoha-xpon*|*airoha-pon*|*luci-app-pon*|*luci-i18n-pon*)
-              cp "$f" release/pon-packages/
+              cp "$f" pon-packages/
               ;;
           esac
         done
         echo "=== 收集的包文件 ==="
-        ls -lh release/pon-packages/
-        if [ -z "$(ls -A release/pon-packages/)" ]; then
+        ls -lh pon-packages/
+        if [ -z "$(ls -A pon-packages/)" ]; then
           echo "::error::未找到任何 .apk 包文件"
           exit 1
         fi
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 14: 上传包文件
+    # 步骤 14: 提交包文件到仓库 pon-packages/ 目录
     # ----------------------------------------------------------
-    - name: Upload packages
-      uses: actions/upload-artifact@main
+    - name: Commit packages to repo
       if: steps.collect.outputs.status == 'success' && !cancelled()
-      with:
-        name: pon-packages-gpon-test
-        path: release/pon-packages
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add -A pon-packages/
+        git diff --cached --quiet && echo "无变更" && exit 0
+        git commit -m "chore: 更新 PON 编译包"
+        git push
