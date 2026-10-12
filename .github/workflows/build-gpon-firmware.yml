@@ -5,7 +5,7 @@
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
-name: Build ImmortalWrt Firmware (AN7581 GPON)
+name: Build ImmortalWrt Firmware (GPON Test)
 on:
   # 定时编译 (默认关闭，取消注释即可启用，cron 使用 UTC 时间)
   # schedule:
@@ -16,8 +16,8 @@ on:
 env:
   # 源码仓库地址
   REPO_URL: https://github.com/DenzelVicent/ponwrt.git
-  # 源码分支 (GPON 相关内核 patch 仅存在于 ponwrt 的 gpon-test 分支)
-  REPO_BRANCH: gpon-test
+  # 源码分支 (GPON 相关内核 patch 仅存在于 ponwrt 的 GPON-Test 分支)
+  REPO_BRANCH: GPON-Test
   # 自定义固件配置文件 (OpenWrt make menuconfig 生成的 .config)
   CONFIG_FILE: .config
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
