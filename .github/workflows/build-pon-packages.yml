@@ -157,29 +157,29 @@ jobs:
       id: compile
       run: |
         cd openwrt
-        echo "=== 编译工具链和目标包 ==="
+        echo "=== 编译工具链 ==="
         make toolchain/install -j$(nproc) || make toolchain/install -j1 || exit 1
         echo "=== 编译 kmod-airoha-xpon ==="
-        make package/kmod-airoha-xpon/compile -j$(nproc) V=s || \
-        make package/kmod-airoha-xpon/compile -j1 V=s || exit 1
+        make package/feeds/pon_drivers/kmod-airoha-xpon/compile -j$(nproc) V=s || \
+        make package/feeds/pon_drivers/kmod-airoha-xpon/compile -j1 V=s || exit 1
         echo "=== 编译 kmod-airoha-pon-frontend ==="
-        make package/kmod-airoha-pon-frontend/compile -j$(nproc) V=s || \
-        make package/kmod-airoha-pon-frontend/compile -j1 V=s || exit 1
+        make package/feeds/pon_drivers/kmod-airoha-pon-frontend/compile -j$(nproc) V=s || \
+        make package/feeds/pon_drivers/kmod-airoha-pon-frontend/compile -j1 V=s || exit 1
         echo "=== 编译 airoha-ponctl ==="
-        make package/airoha-ponctl/compile -j$(nproc) V=s || \
-        make package/airoha-ponctl/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-ponctl/compile -j$(nproc) V=s || \
+        make package/feeds/pon_userspace/airoha-ponctl/compile -j1 V=s || exit 1
         echo "=== 编译 airoha-pond ==="
-        make package/airoha-pond/compile -j$(nproc) V=s || \
-        make package/airoha-pond/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-pond/compile -j$(nproc) V=s || \
+        make package/feeds/pon_userspace/airoha-pond/compile -j1 V=s || exit 1
         echo "=== 编译 airoha-pon-debug ==="
-        make package/airoha-pon-debug/compile -j$(nproc) V=s || \
-        make package/airoha-pon-debug/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-pon-debug/compile -j$(nproc) V=s || \
+        make package/feeds/pon_userspace/airoha-pon-debug/compile -j1 V=s || exit 1
         echo "=== 编译 luci-app-pon ==="
-        make package/luci-app-pon/compile -j$(nproc) V=s || \
-        make package/luci-app-pon/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/luci-app-pon/compile -j$(nproc) V=s || \
+        make package/feeds/pon_userspace/luci-app-pon/compile -j1 V=s || exit 1
         echo "=== 编译 luci-i18n-pon-zh-cn ==="
-        make package/luci-i18n-pon-zh-cn/compile -j$(nproc) V=s || \
-        make package/luci-i18n-pon-zh-cn/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/luci-i18n-pon-zh-cn/compile -j$(nproc) V=s || \
+        make package/feeds/pon_userspace/luci-i18n-pon-zh-cn/compile -j1 V=s || exit 1
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
