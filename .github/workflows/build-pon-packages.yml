@@ -235,4 +235,6 @@ jobs:
         git add -A pon-packages/
         git diff --cached --quiet && echo "无变更" && exit 0
         git commit -m "chore: 更新 PON 编译包"
+        # 构建期间远程分支可能有新提交（CI 起点是快照），先拉取变基再推送
+        git pull --rebase origin "$BRANCH"
         git push origin "$BRANCH"
