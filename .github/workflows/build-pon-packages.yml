@@ -159,6 +159,9 @@ jobs:
         cd openwrt
         echo "=== 编译工具链 ==="
         make toolchain/install -j$(nproc) || make toolchain/install -j1 || exit 1
+        echo "=== 编译内核 (kmod 依赖) ==="
+        make target/linux/compile -j$(nproc) V=s || \
+        make target/linux/compile -j1 V=s || exit 1
         echo "=== 编译 kmod-airoha-xpon ==="
         make package/feeds/pon_drivers/kmod-airoha-xpon/compile -j$(nproc) V=s || \
         make package/feeds/pon_drivers/kmod-airoha-xpon/compile -j1 V=s || exit 1
