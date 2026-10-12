@@ -99,9 +99,10 @@ jobs:
         ln -sf /srcdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     # ----------------------------------------------------------
-    # 步骤 5: 缓存下载目录 (dl/)
-    # 缓存软件包源码，加速重复构建
-    # 缓存 key 基于 feeds 源和配置文件，配置变更自动失效
+    # 步骤 5: 缓存下载目录 (dl/) + ccache
+    # 缓存软件包源码和编译对象，加速重复构建
+    # dl 缓存: 源码包不变则不重新下载
+    # ccache 缓存: 未修改的 C/C++ 源文件编译结果复用
     # ----------------------------------------------------------
     - name: Cache downloads
       uses: actions/cache@v4
@@ -110,6 +111,14 @@ jobs:
         key: immortalwrt-dl-${{ hashFiles('feeds.conf.default', '.config') }}
         restore-keys: |
           immortalwrt-dl-
+
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: immortalwrt-ccache-${{ hashFiles('.config') }}
+        restore-keys: |
+          immortalwrt-ccache-
 
     # ----------------------------------------------------------
     # 步骤 6: 加载自定义 feeds 源
@@ -215,7 +224,7 @@ jobs:
         cd openwrt
         echo -e "$(nproc) thread compile"
         # 多级回退编译; 全部失败时必须让步骤报错, 否则后续无产物却显示成功
-        make -j$(nproc) || make -j1 || make -j1 V=s || exit 1
+        make -j$(nproc) CONFIG_CCACHE=y || make -j1 CONFIG_CCACHE=y || make -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DEVICE_NAME=_nokia-xg-040g-md" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV

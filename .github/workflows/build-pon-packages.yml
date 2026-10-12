@@ -82,7 +82,7 @@ jobs:
         ln -sf /srcdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     # ----------------------------------------------------------
-    # 步骤 5: 缓存下载目录 (dl/)
+    # 步骤 5: 缓存下载目录 (dl/) + ccache
     # ----------------------------------------------------------
     - name: Cache downloads
       uses: actions/cache@v4
@@ -91,6 +91,14 @@ jobs:
         key: gpon-dl-${{ hashFiles('feeds.conf.default', '.config') }}
         restore-keys: |
           gpon-dl-
+
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: gpon-ccache-${{ hashFiles('.config') }}
+        restore-keys: |
+          gpon-ccache-
 
     # ----------------------------------------------------------
     # 步骤 6: 加载自定义 feeds (指向用户 fork)
@@ -158,25 +166,25 @@ jobs:
       run: |
         cd openwrt
         echo "=== 编译工具链 ==="
-        make toolchain/install -j$(nproc) || make toolchain/install -j1 || exit 1
+        make toolchain/install -j$(nproc) CONFIG_CCACHE=y || make toolchain/install -j1 CONFIG_CCACHE=y || exit 1
         echo "=== 编译内核 (kmod 依赖) ==="
-        make target/linux/compile -j$(nproc) V=s || \
-        make target/linux/compile -j1 V=s || exit 1
+        make target/linux/compile -j$(nproc) V=s CONFIG_CCACHE=y || \
+        make target/linux/compile -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "=== 编译 kmod-airoha-xpon ==="
-        make package/feeds/pon_drivers/airoha-xpon/compile -j$(nproc) V=s || \
-        make package/feeds/pon_drivers/airoha-xpon/compile -j1 V=s || exit 1
+        make package/feeds/pon_drivers/airoha-xpon/compile -j$(nproc) V=s CONFIG_CCACHE=y || \
+        make package/feeds/pon_drivers/airoha-xpon/compile -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "=== 编译 kmod-airoha-pon-frontend ==="
-        make package/feeds/pon_drivers/airoha-pon-frontends/compile -j$(nproc) V=s || \
-        make package/feeds/pon_drivers/airoha-pon-frontends/compile -j1 V=s || exit 1
+        make package/feeds/pon_drivers/airoha-pon-frontends/compile -j$(nproc) V=s CONFIG_CCACHE=y || \
+        make package/feeds/pon_drivers/airoha-pon-frontends/compile -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "=== 编译 airoha-ponctl ==="
-        make package/feeds/pon_userspace/airoha-ponctl/compile -j$(nproc) V=s || \
-        make package/feeds/pon_userspace/airoha-ponctl/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-ponctl/compile -j$(nproc) V=s CONFIG_CCACHE=y || \
+        make package/feeds/pon_userspace/airoha-ponctl/compile -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "=== 编译 airoha-pond ==="
-        make package/feeds/pon_userspace/airoha-pon-daemons/compile -j$(nproc) V=s || \
-        make package/feeds/pon_userspace/airoha-pon-daemons/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-pon-daemons/compile -j$(nproc) V=s CONFIG_CCACHE=y || \
+        make package/feeds/pon_userspace/airoha-pon-daemons/compile -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "=== 编译 airoha-pon-debug ==="
-        make package/feeds/pon_userspace/airoha-pon-debug/compile -j$(nproc) V=s || \
-        make package/feeds/pon_userspace/airoha-pon-debug/compile -j1 V=s || exit 1
+        make package/feeds/pon_userspace/airoha-pon-debug/compile -j$(nproc) V=s CONFIG_CCACHE=y || \
+        make package/feeds/pon_userspace/airoha-pon-debug/compile -j1 V=s CONFIG_CCACHE=y || exit 1
         echo "=== 编译 luci-app-pon (含 zh-cn 翻译) ==="
         make package/feeds/pon_userspace/luci-app-pon/compile -j$(nproc) V=s || \
         make package/feeds/pon_userspace/luci-app-pon/compile -j1 V=s || exit 1
