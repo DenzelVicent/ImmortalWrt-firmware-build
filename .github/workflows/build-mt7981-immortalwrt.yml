@@ -162,12 +162,20 @@ jobs:
     # 单线程仍失败则开启详细日志 (V=s) 便于排查
     # 编译产物包含 AX3000T 和 RAX3000M 两个机型的所有变体
     # ----------------------------------------------------------
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: mt7981-ccache-${{ hashFiles('openwrt/.config') }}
+        restore-keys: |
+          mt7981-ccache-
+
     - name: Compile the firmware
       id: compile
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) CONFIG_CCACHE=y || make -j1 CONFIG_CCACHE=y || make -j1 V=s CONFIG_CCACHE=y
         echo "status=success" >> $GITHUB_OUTPUT
         
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
