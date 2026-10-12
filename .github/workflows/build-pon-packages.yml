@@ -236,6 +236,10 @@ jobs:
         git add -A pon-packages/
         git diff --cached --quiet && echo "无变更" && exit 0
         git commit -m "chore: 更新 PON 编译包"
-        # 构建期间远程分支可能有新提交（CI 起点是快照），先拉取变基再推送
-        git pull --rebase origin "$BRANCH"
+        # 构建期间远程分支可能有新提交（CI 起点是快照），先拉取变基再推送。
+        # --autostash 必需：步骤 10 用 mv 把仓库根目录被跟踪的 .config 移进 openwrt/，
+        # 这条删除不属于产物提交，不自动暂存则 pull --rebase 报
+        # "cannot pull with rebase: You have unstaged changes" 直接失败
+        # （2026-10-13 构建产物提交 36abe9a 即因此未能推送）。
+        git pull --rebase --autostash origin "$BRANCH"
         git push origin "$BRANCH"
