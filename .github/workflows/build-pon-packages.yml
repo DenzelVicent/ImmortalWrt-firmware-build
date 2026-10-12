@@ -5,14 +5,14 @@
 # feeds 指向 DenzelVicent fork (含 GPON 兼容性改造)
 # ============================================================
 
-name: Build PON Packages (GPON Test)
+name: Build PON Packages (AN7581 GPON)
 on:
   workflow_dispatch:
 
 env:
   REPO_URL: https://github.com/DenzelVicent/ponwrt.git
   # 须与 GPON 固件源码分支一致, 否则 kmod 与固件内核 ABI 不匹配
-  REPO_BRANCH: GPON-Test
+  REPO_BRANCH: AN7581-gpon
   CONFIG_FILE: .config
   SELF_BEFORE_SH: before-update-custom.sh
   SELF_AFTER_SH: after-update-custom.sh
