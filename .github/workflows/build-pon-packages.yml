@@ -215,9 +215,15 @@ jobs:
     - name: Commit packages to repo
       if: steps.collect.outputs.status == 'success' && !cancelled()
       run: |
+        # 安全检查: 禁止向 master 推送编译产物
+        BRANCH="${GITHUB_REF_NAME}"
+        if [ "$BRANCH" = "master" ]; then
+          echo "::error::禁止向 master 分支推送编译产物"
+          exit 1
+        fi
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add -A pon-packages/
         git diff --cached --quiet && echo "无变更" && exit 0
         git commit -m "chore: 更新 PON 编译包"
-        git push
+        git push origin "$BRANCH"
