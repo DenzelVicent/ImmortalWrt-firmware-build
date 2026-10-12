@@ -1,0 +1,6 @@
+# 行尾符规范化
+# 背景: 本机 git 配置 core.autocrlf=true, checkout 时会把文本文件转成 CRLF,
+#       导致 .sh 脚本在 bash 下报 "$'\r': command not found" 无法运行。
+# 规则: 所有 shell 脚本强制使用 LF 行尾(仓库内存 LF, 工作区也保持 LF)。
+# 维护: 若新增其他跨平台脚本类型(如 .py 需在 Linux CI 执行), 按同样格式追加。
+*.sh text eol=lf
