@@ -61,7 +61,7 @@
 
 | 文件 | 用途 |
 |---|---|
-| `mt7981.config` | OpenWrt menuconfig 配置 — 定义目标设备、内核选项、WiFi 驱动特性及包含的软件包。工作流复制成 `openwrt/.config`，按触发表的 `use_ccache` 追加缓存开关 |
+| `mt7981.config` | OpenWrt menuconfig 配置 — 定义目标设备、内核选项、WiFi 驱动特性及包含的软件包。工作流复制成 `openwrt/.config`，按触发表的 `use_dl_cache` / `use_ccache` 追加缓存开关。`Cache ...` 的 key 前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里的哈希文件名。开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
 | `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
 | `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等 |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |
