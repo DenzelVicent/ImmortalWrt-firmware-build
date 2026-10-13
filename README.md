@@ -74,7 +74,7 @@
 
 | 文件 | 用途 |
 |---|---|
-| `an7581-gpon.config` / `an7581.config` / `mt7981.config` | 按设备型号命名的 OpenWrt menuconfig 配置，位于各自分支根目录（master 不存放配置文件）— 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的 `use_ccache` 追加缓存开关 |
+| `an7581-gpon.config` / `an7581.config` / `mt7981.config` | 按设备型号命名的 OpenWrt menuconfig 配置，位于各自分支根目录（master 不存放配置文件）— 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的缓存开关追加 `CONFIG_CCACHE=y`（三个分支都有 `use_dl_cache` / `use_ccache` 两个开关）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备名要同步这两个变量和 key 里的哈希文件名；开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
 | `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
 | `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等 |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |

@@ -19,6 +19,10 @@ on:
       # 关闭时 Cache ccache 步骤整体跳过，既不恢复也不保存 openwrt/.ccache。
       # 注意：boolean 的 default 只作用于网页表单；用 API 或 schedule 触发且未显式传 inputs
       # 时取到空值，等同于关闭缓存。
+      use_dl_cache:
+        description: 启用 dl 软件包源码下载缓存（改了 package 的源码版本/地址、或怀疑 dl 里是旧包时关掉）
+        type: boolean
+        default: true
       use_ccache:
         description: 启用 ccache 编译对象缓存（首次冷编译、或怀疑产物不对需排除 ccache 时关掉）
         type: boolean
@@ -32,6 +36,11 @@ env:
   # 自定义固件配置文件 (OpenWrt make menuconfig 生成，按设备型号命名)
   # 工作流把它复制成 openwrt/.config；按型号命名是为了与"编译期真正的 .config"区分开
   CONFIG_FILE: mt7981.config
+  # 缓存 key 的可读前缀：就是上面配置文件名去掉 .config 后缀，换设备时这两行成对一起改
+  # (key 拼成 ${{ env.CONFIG_NAME }}-dl-<hash> / -ccache-<hash>)。
+  # hashFiles 的参数按 GitHub 规定只能是字面量/glob、不接受变量，所以下面两条 key 里
+  # 的配置文件名还得再同步一次。
+  CONFIG_NAME: mt7981
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
   # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
@@ -177,6 +186,48 @@ jobs:
         $GITHUB_WORKSPACE/$SELF_AFTER_SH
 
     # ----------------------------------------------------------
+    # 步骤 8.5: 缓存下载目录 (dl/)
+    # 缓存软件包源码 tarball，加速重复构建；由触发表单的 use_dl_cache 控制
+    #
+    # key = ${{ env.CONFIG_NAME }} + -dl- + 配置内容哈希，前缀不再是写死的设备名。
+    # 设备名前置（而不是跟在 immortalwrt- 这类公共前缀之后）是必须的：restore-keys 按字符串
+    # 前缀匹配，`immortalwrt-dl-an7581-` 恰好是 `immortalwrt-dl-an7581-gpon-<hash>` 的前缀，
+    # 两条分支就会互相命中对方缓存（缓存虽按分支隔离，但默认分支 master 创建的条目各分支都能恢复）。
+    # 前置后 an7581- / an7581-gpon- / mt7981- 三组前缀互不为前缀。
+    #
+    # 前缀之后仍要拼 hashFiles：actions/cache 只在主 key 未精确命中时才保存缓存，
+    # 纯常量 key 一旦命中就永久不再更新（改配置也不会失效），
+    # "内容哈希 key + restore-keys 前缀"才是缓存能滚动更新的唯一通道。
+    # 哈希参数取仓库根的设备配置文件，外加可选的 feeds.conf.default。后者本仓库当前没有，
+    # hashFiles 对缺失项不产生任何贡献，所以它现在不参与计算；留着是为了以后真在根目录
+    # 放入该文件时能自动让缓存失效——缓存步骤排在 Load custom feeds 的 mv 之前，那时
+    # 根目录那份文件还在，取得到。
+    #
+    # 同一台设备改配置只换哈希、前缀不变，同分支的旧条目由 restore-keys 兜住，不会冷启动。
+    # 开关关掉时 Clear dl cache if disabled 步骤会从 Actions 缓存存储里删除旧条目，
+    # 防止下次打开开关时恢复到旧缓存。
+    # ----------------------------------------------------------
+    - name: Cache downloads
+      if: ${{ inputs.use_dl_cache }}
+      uses: actions/cache@v4
+      with:
+        path: openwrt/dl
+        key: ${{ env.CONFIG_NAME }}-dl-${{ hashFiles('feeds.conf.default', 'mt7981.config') }}
+        restore-keys: |
+          ${{ env.CONFIG_NAME }}-dl-
+
+    - name: Clear dl cache if disabled
+      if: ${{ !inputs.use_dl_cache }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 开关关掉时从 Actions 缓存存储里删除旧条目，防止下次打开开关时恢复到旧缓存。
+        # gh cache list 默认只返回 30 条，--limit 100 增加上限；通常一个仓库的缓存条目不会太多。
+        gh cache list --limit 100 --json key,id | \
+          jq -r '.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-dl-")) | .id' | \
+          xargs -r gh cache delete --yes
+
+    # ----------------------------------------------------------
     # 步骤 9: 下载编译所需的软件包源码
     # make defconfig 根据 .config 生成完整配置
     # make download 预下载所有源码包，避免编译时网络超时
@@ -217,17 +268,33 @@ jobs:
     # 那是被 defconfig 展开后的完整结果，会随 feed 内容一起变，而 openwrt 本身还是
     # 指向 /srcdir/openwrt 的符号链接，能不能取到没有日志可证。哈希仓库里的输入文件
     # 语义才明确——改本仓库配置才换 key；同分支旧 key 由 restore-keys 前缀兜住，不会冷启动。
+    # key = ${{ env.CONFIG_NAME }}-ccache- + 配置内容哈希；CONFIG_NAME 与 CONFIG_FILE 在 env 段
+    # 成对定义（配置文件名去掉 .config 后缀），换设备只改那两行。hashFiles 的参数按 GitHub
+    # 规定只能是字面量/glob、不接受变量，所以下面 key 里的文件名还得同步改。
+    # 设备名前置是为了不去命中 AN7581 两个工作流的 restore-keys（道理见那两份步骤 5 的说明）。
     # 这里不带 AN7581 那两个工作流里的 feeds.conf.default：本分支的缓存步骤排在
     # Load custom feeds 的 mv 之后，根目录那份（若存在）此时已被移走，哈希不到。
+    # 开关关掉时 Clear ccache if disabled 步骤会从 Actions 缓存存储里删除旧条目，
+    # 防止下次打开开关时恢复到旧缓存。
     # ----------------------------------------------------------
     - name: Cache ccache
       if: ${{ inputs.use_ccache }}
       uses: actions/cache@v4
       with:
         path: openwrt/.ccache
-        key: mt7981-ccache-${{ hashFiles('mt7981.config') }}
+        key: ${{ env.CONFIG_NAME }}-ccache-${{ hashFiles('mt7981.config') }}
         restore-keys: |
-          mt7981-ccache-
+          ${{ env.CONFIG_NAME }}-ccache-
+
+    - name: Clear ccache if disabled
+      if: ${{ !inputs.use_ccache }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 开关关掉时从 Actions 缓存存储里删除旧条目，防止下次打开开关时恢复到旧缓存。
+        gh cache list --limit 100 --json key,id | \
+          jq -r '.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-ccache-")) | .id' | \
+          xargs -r gh cache delete --yes
 
     - name: Compile the firmware
       id: compile
