@@ -139,7 +139,7 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 2. 检出本仓库配置文件与脚本
 3. 安装编译依赖工具链
 4. 克隆 ImmortalWrt 源码到 `/srcdir` (更大磁盘)
-5. 缓存 `dl/` 下载目录 (按配置哈希，加速重复构建)
+5. 缓存 `dl/` 下载目录与 `openwrt/.ccache`（key = 工作流 env 里的 `CONFIG_NAME` + `-dl-`/`-ccache-` + 配置内容哈希；`CONFIG_NAME` 与 `CONFIG_FILE` 成对定义，开关见下方"触发方式"）
 6. 覆盖 feeds 源，执行 `before-update-custom.sh`
 7. 更新并安装 feeds
 8. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
@@ -152,9 +152,12 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 
 ### 触发方式
 
-- **手动触发**: GitHub Actions 页面点击 "Run workflow"，选择分支并设置 `use_ccache`
-  （启用 ccache 编译对象缓存；首次冷编译、或怀疑产物不对需要排除 ccache 时取消勾选，
-  此时 `Cache ccache` 步骤整体跳过，既不恢复也不保存 `openwrt/.ccache`）
+- **手动触发**: GitHub Actions 页面点击 "Run workflow"，选择分支并设置两个缓存开关：
+  - `use_dl_cache` — `dl/` 软件包源码下载缓存。改了某个 package 的源码版本或下载地址
+    （Makefile 里的 `PKG_VERSION` / `PKG_SOURCE_VERSION` / `PKG_SOURCE_URL`）而缓存里仍是同名旧包时
+    取消勾选，本趟全部重新下载；这些字段不在缓存 key 的哈希范围内，改了不会自动失效。
+  - `use_ccache` — `openwrt/.ccache` 编译对象缓存。首次冷编译、或怀疑产物不对需要排除 ccache 时取消勾选。
+  取消勾选只是这一趟跳过对应的 `Cache ...` 步骤（既不恢复也不保存），同时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目，防止下次打开开关时恢复到旧缓存；要彻底丢弃旧条目也可以直接去 仓库 Settings → Actions → Caches 手动删除。
 - **定时编译**: 编辑 workflow 文件取消 `schedule` 注释 (UTC 时间)
 
 ### 自定义配置
