@@ -26,7 +26,8 @@ env:
   SELF_AFTER_SH: after-update-custom.sh
   # 编译环境时区
   TZ: Asia/Shanghai
-  # 自定义 feeds 配置文件 (如存在则覆盖默认 feeds 源)
+  # 可选覆盖：本仓库根目录存在该文件时才 mv 覆盖源码自带 feeds，当前不存在
+  # (GPON 的 fork feed 源在 PonWrt AN7581-gpon 分支的 feeds.conf.default 里)
   FEEDS_CONF: feeds.conf.default
 
 jobs:
@@ -103,6 +104,8 @@ jobs:
     # 缓存软件包源码和编译对象，加速重复构建
     # dl 缓存: 源码包不变则不重新下载
     # ccache 缓存: 未修改的 C/C++ 源文件编译结果复用
+    # key 里的 feeds.conf.default 当前不存在，hashFiles 对缺失项返回空串，
+    # 所以删掉该文件只让 key 变一次；restore-keys 前缀会命中旧缓存，不会冷下载
     # ----------------------------------------------------------
     - name: Cache downloads
       uses: actions/cache@v4
@@ -121,8 +124,10 @@ jobs:
           immortalwrt-ccache-
 
     # ----------------------------------------------------------
-    # 步骤 6: 加载自定义 feeds 源
-    # 如果仓库中存在 feeds.conf.default 则覆盖源码默认值
+    # 步骤 6: 加载 feeds 源
+    # GPON 所需的 pon_drivers / pon_userspace 两个 fork 源由 PonWrt 的
+    # AN7581-gpon 分支自带，本仓库不放 feeds.conf.default 去覆盖，避免源码
+    # 与编译配置耦合；仅当根目录存在该文件时才 mv 覆盖
     # 然后执行 before-update-custom.sh (可添加第三方 feed)
     # ----------------------------------------------------------
     - name: Load custom feeds
