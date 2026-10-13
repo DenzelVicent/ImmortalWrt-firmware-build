@@ -61,7 +61,7 @@
 
 | 文件 | 用途 |
 |---|---|
-| `.config` | OpenWrt menuconfig 配置 — 定义目标设备、内核选项、WiFi 驱动特性及包含的软件包 |
+| `mt7981.config` | OpenWrt menuconfig 配置 — 定义目标设备、内核选项、WiFi 驱动特性及包含的软件包。工作流复制成 `openwrt/.config`，按触发表的 `use_ccache` 追加缓存开关 |
 | `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
 | `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等 |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |

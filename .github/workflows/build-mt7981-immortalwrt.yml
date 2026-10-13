@@ -11,14 +11,27 @@ on:
   #   - cron: "0 0 20 * *"
   # 手动触发：可在 GitHub Actions 页面点击 "Run workflow" 按钮
   workflow_dispatch:
+    inputs:
+      # ccache 编译对象缓存开关（和上面的选分支一样在触发表单里勾选）
+      # 开启方式是把 CONFIG_CCACHE=y 追加进 openwrt/.config，而不是往 make 命令行传参数：
+      # rules.mk 读的就是 .config 里的这个 make 变量，两条路最终等价，但传参数会让
+      # "开关"和"Cache ccache 步骤"两处状态各写一次，容易改一漏一。
+      # 关闭时 Cache ccache 步骤整体跳过，既不恢复也不保存 openwrt/.ccache。
+      # 注意：boolean 的 default 只作用于网页表单；用 API 或 schedule 触发且未显式传 inputs
+      # 时取到空值，等同于关闭缓存。
+      use_ccache:
+        description: 启用 ccache 编译对象缓存（首次冷编译、或怀疑产物不对需排除 ccache 时关掉）
+        type: boolean
+        default: true
 
 env:
   # 源码仓库地址 (hanwckf 的 MT798x ImmortalWrt 分支)
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
   # 源码分支 (openwrt-21.02 基于 OpenWrt 21.02)
   REPO_BRANCH: openwrt-21.02
-  # 自定义固件配置文件 (OpenWrt make menuconfig 生成的 .config)
-  CONFIG_FILE: .config
+  # 自定义固件配置文件 (OpenWrt make menuconfig 生成，按设备型号命名)
+  # 工作流把它复制成 openwrt/.config；按型号命名是为了与"编译期真正的 .config"区分开
+  CONFIG_FILE: mt7981.config
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
   # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
@@ -56,7 +69,7 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 2: 检出本仓库代码
-    # 将 .config、自定义脚本等文件拉取到工作区
+    # 将设备配置 mt7981.config、自定义脚本等文件拉取到工作区
     # ----------------------------------------------------------
     - name: Checkout
       uses: actions/checkout@main
@@ -129,14 +142,36 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 8: 加载自定义配置
-    # 将 .config 复制为 openwrt/.config 作为编译配置
+    # 将设备配置复制为 openwrt/.config 作为编译配置（用 cp 不用 mv：留着仓库根那份
+    # 在工作区里，后面若还要排查 key 或复跑步骤都还能看到原始输入）
+    # 触发表单勾选 use_ccache 时，在这里追加 CONFIG_CCACHE=y，make 命令行不再带参数
     # 如果存在 files/ 目录则复制到 openwrt/files/ 作为固件内预置文件
     # 最后执行 after-update-custom.sh (修改默认 IP、DHCP 范围等)
     # ----------------------------------------------------------
     - name: Load custom config
+      env:
+        USE_CCACHE: ${{ inputs.use_ccache }}
       run: |
         [ -e files ] && mv files openwrt/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        # 配置文件必须存在，缺了就报错退出。不要写成 [ -e $CONFIG_FILE ] && cp ... ：
+        # Actions 默认 shell 是 bash -e，而 && 列表里失败的那个不是最后一个命令，
+        # set -e 不会终止步骤（已实测：文件不存在时后续命令照跑）。
+        # 后果是静默用源码仓库的默认配置编译到底，产出不含本项目软件包的固件还显示成功。
+        if [ ! -e "$CONFIG_FILE" ]; then
+          echo "::error::缺少编译配置文件 $CONFIG_FILE（应位于本仓库根目录，检查工作流 CONFIG_FILE 与分支上的文件名是否一致）"
+          exit 1
+        fi
+        cp "$CONFIG_FILE" openwrt/.config
+        # 缓存开关落在 .config 里：rules.mk 的 ifneq ($(CONFIG_CCACHE),) 读的就是这个变量，
+        # 与从前在 make 行传 CONFIG_CCACHE=y 等价。21.02 的 config CCACHE 同样是
+        # `bool "Use ccache" if DEVEL`，而 mt7981.config 第 53 行已有 CONFIG_DEVEL=y，
+        # 符号可见，所以下一步的 make defconfig 不会丢掉它（那里有 grep 兜底自检）。
+        # 用 printf 且前置 \n：本分支 mt7981.config 的末行没有换行符，直接追加会和
+        # 最后一行粘成 CONFIG_PACKAGE_dnsmasq=nCONFIG_CCACHE=y 这样的无效行，
+        # 被 kconfig 静默忽略、开关等于没开。
+        if [ "$USE_CCACHE" = "true" ]; then
+          printf '\n%s\n' 'CONFIG_CCACHE=y' >> openwrt/.config
+        fi
         chmod +x $SELF_AFTER_SH
         cd openwrt
         $GITHUB_WORKSPACE/$SELF_AFTER_SH
@@ -149,9 +184,18 @@ jobs:
     # ----------------------------------------------------------
     - name: Download package
       id: package
+      env:
+        USE_CCACHE: ${{ inputs.use_ccache }}
       run: |
         cd openwrt
         make defconfig
+        # 兜底自检：开关被 defconfig 丢掉就直接失败，而不是白编一趟才发现命中率是 0
+        if [ "$USE_CCACHE" = "true" ]; then
+          grep -q '^CONFIG_CCACHE=y' .config || {
+            echo "::error::CONFIG_CCACHE=y 没能进入 defconfig 结果，检查 $CONFIG_FILE 里是否有 CONFIG_DEVEL=y"
+            exit 1
+          }
+        fi
         make download -j8 V=11
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -164,16 +208,24 @@ jobs:
     #
     # ccache 路径必须是 openwrt/.ccache，不能写 ~/.ccache：
     # 源码是 hanwckf/immortalwrt-mt798x (openwrt-21.02)，其 rules.mk 里
-    # CCACHE_DIR 默认取 $(TOPDIR)/.ccache，而本分支 .config 只有 CONFIG_DEVEL=y、
+    # CCACHE_DIR 默认取 $(TOPDIR)/.ccache，而本分支 mt7981.config 只有 CONFIG_DEVEL=y、
     # 未设 CONFIG_CCACHE_DIR，所以编译实际写入的是 openwrt/.ccache。
     # 此前缓存 ~/.ccache 时两边不是同一目录，命中率恒为 0，白付 ccache 开销。
     # 命中率看构建日志末尾的 `ccache -s`（Makefile world 目标自带）。
+    #
+    # key 改成哈希仓库根的 mt7981.config（原先哈希的是 openwrt/.config）：
+    # 那是被 defconfig 展开后的完整结果，会随 feed 内容一起变，而 openwrt 本身还是
+    # 指向 /srcdir/openwrt 的符号链接，能不能取到没有日志可证。哈希仓库里的输入文件
+    # 语义才明确——改本仓库配置才换 key；同分支旧 key 由 restore-keys 前缀兜住，不会冷启动。
+    # 这里不带 AN7581 那两个工作流里的 feeds.conf.default：本分支的缓存步骤排在
+    # Load custom feeds 的 mv 之后，根目录那份（若存在）此时已被移走，哈希不到。
     # ----------------------------------------------------------
     - name: Cache ccache
+      if: ${{ inputs.use_ccache }}
       uses: actions/cache@v4
       with:
         path: openwrt/.ccache
-        key: mt7981-ccache-${{ hashFiles('openwrt/.config') }}
+        key: mt7981-ccache-${{ hashFiles('mt7981.config') }}
         restore-keys: |
           mt7981-ccache-
 
@@ -182,7 +234,9 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) CONFIG_CCACHE=y || make -j1 CONFIG_CCACHE=y || make -j1 V=s CONFIG_CCACHE=y
+        # 命令行不再传 CONFIG_CCACHE=y：开关已由步骤 8 按触发表单写进 .config，
+        # 回退的三条 make 都读同一份 .config，不必各带一遍参数
+        make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
@@ -227,7 +281,7 @@ jobs:
     # 每个型号一个独立 artifact, 下载后直接是各固件 bin, 便于单独取用
     # 与 Release 附件 (tar.zst 整包) 形态不同: artifact 供挑文件, Release 供整包下载
     # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
-    # 型号目录不存在时 (.config 未启用该设备) 跳过对应上传
+    # 型号目录不存在时 (mt7981.config 未启用该设备) 跳过对应上传
     # ----------------------------------------------------------
     - name: Upload firmware xiaomi_mi-router-ax3000t
       uses: actions/upload-artifact@main
