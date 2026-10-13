@@ -95,13 +95,18 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 ```
 ├── .github/workflows/
 │   └── build-an7581-immortalwrt.yml  # GitHub Actions 编译工作流
-├── configs/
-│   └── an7581.config           # AN7581 平台完整配置 (本地编译参考)
-├── .config                     # 设备专用编译配置 (云编译用)
+├── an7581.config               # 云编译配置（工作流 CONFIG_FILE 指向它）
+├── configs/                     # 从源码仓库拷来的参考配置，工作流不读取
+│   └── an7581.config            # AN7581 平台完整配置 (menuconfig 展开结果)
 ├── before-update-custom.sh     # feeds 更新前执行的自定义脚本
-├── after-update-custom.sh      # feeds 更新后执行的自定义脚本
-└── feeds.conf.default          # 自定义 feeds 源配置
+└── after-update-custom.sh      # feeds 更新后执行的自定义脚本
 ```
+
+> 设备配置按型号命名放在仓库根，是为了和编译期真正的 `openwrt/.config` 区分开：
+> 工作流把根目录的 `an7581.config` 复制成 `openwrt/.config`，再按触发表单追加缓存开关，
+> 然后 `make defconfig` 展开。`configs/` 下那份同名文件只是参考，不参与编译。
+>
+> 本仓库根目录**不放** `feeds.conf.default`（工作流留着 `[ -e ]` 覆盖入口，按需自建）。
 
 ## 脚本说明
 
@@ -138,21 +143,23 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 6. 覆盖 feeds 源，执行 `before-update-custom.sh`
 7. 更新并安装 feeds
 8. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
-9. `kconfig.pl +` 合并设备配置与发布配置 → `make defconfig`
+9. 将仓库根的 `an7581.config`（已含 release 增量）复制为 `openwrt/.config`，触发表单勾选 `use_ccache` 时追加 `CONFIG_CCACHE=y` → `make defconfig` 展开
 10. 执行 `after-update-custom.sh` 修改默认参数
 11. 预下载软件包源码 (`make download`)
-12. 并行编译固件 (失败自动回退单线程)
+12. 并行编译固件 (失败自动回退单线程；缓存开关取自步骤 9 写入的 .config，命令行不再带参数)
 13. 收集固件镜像，发布到 GitHub Release
 14. 清理旧 workflow runs (保留 7 天 / 至少 3 条) 和旧 Release (保留最近 3 个)
 
 ### 触发方式
 
-- **手动触发**: GitHub Actions 页面点击 "Run workflow"
+- **手动触发**: GitHub Actions 页面点击 "Run workflow"，选择分支并设置 `use_ccache`
+  （启用 ccache 编译对象缓存；首次冷编译、或怀疑产物不对需要排除 ccache 时取消勾选，
+  此时 `Cache ccache` 步骤整体跳过，既不恢复也不保存 `openwrt/.ccache`）
 - **定时编译**: 编辑 workflow 文件取消 `schedule` 注释 (UTC 时间)
 
 ### 自定义配置
 
-- 修改 `.config` 调整软件包和内核模块
+- 修改 `an7581.config` 调整软件包和内核模块（`configs/` 下的参考配置改了不影响云编译，工作流不读它）
 - 修改 `after-update-custom.sh` 自定义默认 IP、DHCP 等
 - 修改 `.github/workflows/build-an7581-immortalwrt.yml` 的 `env` 段切换设备或源码分支
 
