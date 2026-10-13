@@ -161,11 +161,18 @@ jobs:
     # 优先使用全部 CPU 核心并行编译，失败后回退到单线程
     # 单线程仍失败则开启详细日志 (V=s) 便于排查
     # 编译产物包含 AX3000T 和 RAX3000M 两个机型的所有变体
+    #
+    # ccache 路径必须是 openwrt/.ccache，不能写 ~/.ccache：
+    # 源码是 hanwckf/immortalwrt-mt798x (openwrt-21.02)，其 rules.mk 里
+    # CCACHE_DIR 默认取 $(TOPDIR)/.ccache，而本分支 .config 只有 CONFIG_DEVEL=y、
+    # 未设 CONFIG_CCACHE_DIR，所以编译实际写入的是 openwrt/.ccache。
+    # 此前缓存 ~/.ccache 时两边不是同一目录，命中率恒为 0，白付 ccache 开销。
+    # 命中率看构建日志末尾的 `ccache -s`（Makefile world 目标自带）。
     # ----------------------------------------------------------
     - name: Cache ccache
       uses: actions/cache@v4
       with:
-        path: ~/.ccache
+        path: openwrt/.ccache
         key: mt7981-ccache-${{ hashFiles('openwrt/.config') }}
         restore-keys: |
           mt7981-ccache-
