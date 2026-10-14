@@ -54,7 +54,7 @@ env:
   # 的配置文件名还得再同步一次。
   CONFIG_NAME: an7581-gpon
   # 目标设备和子目标（编译产物路径使用）
-  DEVICE_NAME: _nokia-xg-040g-md
+  DEVICE_NAME: nokia-xg-040g-md
   SUBTARGET: an7581
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
@@ -360,12 +360,11 @@ jobs:
       id: organize
       if: (!cancelled())
       run: |
-        device="${DEVICE_NAME#_}"
-        echo "DEVICE=$device" >> $GITHUB_ENV
-        mkdir -p "release/$device"
+        echo "DEVICE=$DEVICE_NAME" >> $GITHUB_ENV
+        mkdir -p "release/$DEVICE_NAME"
         for f in openwrt/bin/targets/airoha/${SUBTARGET}/*.bin openwrt/bin/targets/airoha/${SUBTARGET}/*.itb; do
           [ -e "$f" ] || continue
-          cp "$f" "release/$device/"
+          cp "$f" "release/$DEVICE_NAME/"
         done
         ls -l "release/$device"
         echo "status=success" >> $GITHUB_OUTPUT
