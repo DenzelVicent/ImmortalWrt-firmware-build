@@ -173,14 +173,18 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
 # 拉取源码
-git clone https://github.com/DenzelVicent/ponwrt.git
+git clone https://github.com/pbs05/ponwrt.git
 cd ponwrt
 
 # 更新并安装 feeds
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-# 选择配置 (以 AN7581 为例)
+# 克隆第三方包 (不在 feed 中，必须在 make defconfig 前完成，否则 kconfig 静默丢弃)
+git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/luci-app-lucky
+git clone --depth 1 https://github.com/DenzelVicent/luci-app-airoha-npu.git package/luci-app-airoha-npu
+
+# 选择配置
 cp configs/an7581.config .config
 # 若目标是 AN7583，改用: cp configs/an7583.config .config
 
