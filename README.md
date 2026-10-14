@@ -3,15 +3,26 @@
 > MT7981 源码：[Hanwckf's ImmortalWrt](https://github.com/hanwckf/immortalwrt-mt798x) | [U-Boot](https://github.com/hanwckf/bl-mt798x)  
 > AN7581 源码：[ImmortalWrt](https://github.com/DenzelVicent/ponwrt)
 
-本项目利用 GitHub Actions 编译 ImmortalWrt 固件，支持 MT7981 和 AN7581 两大平台。
+本项目利用 GitHub Actions 编译 ImmortalWrt 固件，支持 MT7981 和 AN758x 两大平台。
+
+## 分支结构
+
+| 分支 | 说明 | 配置文件 |
+|---|---|---|
+| `master` | 总览分支，存放所有工作流模板（不存放设备配置） | — |
+| `AN7581` | AN7581 平台 XGS-PON 固件 | `an7581.config` |
+| `AN7581-GPON` | AN7581 平台 GPON 固件 (Nokia XG-040G-MD) | `an7581-gpon.config` |
+| `AN7583-GPON` | AN7583 平台 GPON 固件 (Nokia XG-040G-MF) | `an7583-gpon.config` |
+| `MT7981-hanwckf` | MT7981 平台固件 + U-Boot | `mt7981.config` |
 
 ## 编译工作流
 
-| 工作流 | 说明 | 触发方式 |
-|---|---|---|
-| `build-mt7981-immortalwrt.yml` | 编译 MT7981 平台路由器 ImmortalWrt 固件 | 手动触发 (`workflow_dispatch`) |
-| `build-mt7981-u-boot.yml` | 并行编译 MT7981 平台所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
-| `build-an7581-immortalwrt.yml` | 编译 AN7581 平台光猫 ImmortalWrt 固件 | 手动触发 (`workflow_dispatch`) |
+| 工作流 | 所在分支 | 说明 | 触发方式 |
+|---|---|---|---|
+| `build-mt7981-immortalwrt.yml` | MT7981-hanwckf / master | 编译 MT7981 平台路由器 ImmortalWrt 固件 | 手动触发 (`workflow_dispatch`) |
+| `build-mt7981-u-boot.yml` | MT7981-hanwckf / master | 并行编译 MT7981 平台所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
+| `build-an7581-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫 ImmortalWrt 固件 (XGS-PON) | 手动触发 (`workflow_dispatch`) |
+| `build-gpon-firmware.yml` | AN7581-GPON / AN7583-GPON / master | 编译 AN758x 平台 GPON 固件（`REPO_BRANCH` 由 `github.ref_name` 自动适配） | 手动触发 (`workflow_dispatch`) |
 
 ## MT7981 平台默认配置
 
@@ -74,7 +85,7 @@
 
 | 文件 | 用途 |
 |---|---|
-| `an7581-gpon.config` / `an7581.config` / `mt7981.config` | 按设备型号命名的 OpenWrt menuconfig 配置，位于各自分支根目录（master 不存放配置文件）— 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的缓存开关追加 `CONFIG_CCACHE=y`（三个分支都有 `use_dl_cache` / `use_ccache` 两个开关）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备名要同步这两个变量和 key 里的哈希文件名；开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
+| `an7581-gpon.config` / `an7583-gpon.config` / `an7581.config` / `mt7981.config` | 按设备型号命名的 OpenWrt menuconfig 配置，位于各自分支根目录（master 不存放配置文件）— 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的缓存开关追加 `CONFIG_CCACHE=y`（三个分支都有 `use_dl_cache` / `use_ccache` 两个开关）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备名要同步这两个变量和 key 里的哈希文件名；开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
 | `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
 | `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等 |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |
