@@ -1,7 +1,7 @@
 # ============================================================
-# ImmortalWrt GPON 固件编译工作流
-# 支持机型: 由分支名决定 (AN7581-GPON → Nokia XG-040G-MD, AN7583-GPON → Nokia XG-040G-MF)
-# 源码来源: https://github.com/DenzelVicent/ponwrt.git (分支名与本仓库分支同名)
+# ImmortalWrt GPON 固件编译工作流 (AN7583-GPON)
+# 目标设备: Nokia XG-040G-MF (Airoha AN7583)
+# 源码来源: https://github.com/DenzelVicent/ponwrt.git (AN7583-GPON 分支)
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
@@ -41,9 +41,8 @@ on:
 env:
   # 源码仓库地址
   REPO_URL: https://github.com/DenzelVicent/ponwrt.git
-  # 源码分支：自动取本仓库触发时的分支名，ponwrt 侧需有同名分支提供 GPON 内核 patch
-  # (AN7581-GPON 分支 → ponwrt AN7581-GPON 分支，AN7583-GPON 同理)
-  REPO_BRANCH: ${{ github.ref_name }}
+  # 源码分支：AN7583-GPON 使用 ponwrt 的 AN7583-GPON 分支（含 GPON 内核 patch）
+  REPO_BRANCH: AN7583-GPON
   # 自定义固件配置文件 (OpenWrt make menuconfig 生成，按设备型号命名)
   # 工作流把它复制成 openwrt/.config。按型号命名是为了和"编译期真正的 .config"区分开，
   # 也避免和 configs/ 下那份从源码仓库拷来的参考配置撞名。
@@ -54,6 +53,9 @@ env:
   # hashFiles 的参数按 GitHub 规定只能是字面量/glob、不接受变量，所以下面两条 key 里
   # 的配置文件名还得再同步一次。
   CONFIG_NAME: an7583-gpon
+  # 目标设备和子目标（编译产物路径使用）
+  DEVICE_NAME: _nokia-xg-040g-mf
+  SUBTARGET: an7583
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
   # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
@@ -96,28 +98,6 @@ jobs:
       uses: actions/checkout@main
 
     # ----------------------------------------------------------
-    # 步骤 2.5: 根据分支名推导设备参数
-    # 分支名格式: AN758x-GPON → 从 x 提取 SoC 系列 (an7581/an7583)
-    # SoC → 设备名 (nokia-xg-040g-md / nokia-xg-040g-mf) 和子目标
-    # 后续编译产物路径、Release 描述均引用这些变量，新增 GPON 设备只需
-    # 在本 case 加一行 + 准备对应配置文件即可，工作流其余部分不用改。
-    # ----------------------------------------------------------
-    - name: Setup device parameters
-      run: |
-        BRANCH="${{ github.ref_name }}"
-        SOC="${BRANCH#AN758}"
-        SOC="an758${SOC%%-*}"
-        case "$SOC" in
-          an7581) DEVICE_NAME="nokia-xg-040g-md" ;;
-          an7583) DEVICE_NAME="nokia-xg-040g-mf" ;;
-          *) echo "::error::未知 GPON 分支: $BRANCH，无法推导设备名"; exit 1 ;;
-        esac
-        echo "DEVICE_NAME=_${DEVICE_NAME}" >> $GITHUB_ENV
-        echo "SUBTARGET=${SOC}" >> $GITHUB_ENV
-        echo "DEVICE_MODEL=${DEVICE_NAME}" >> $GITHUB_ENV
-        echo "Branch=$BRANCH SoC=$SOC Device=$DEVICE_NAME"
-
-    # ----------------------------------------------------------
     # 步骤 3: 安装编译依赖
     # ImmortalWrt 需要 ubuntu-24.04 和完整工具链
     # ----------------------------------------------------------
@@ -146,7 +126,6 @@ jobs:
     # 步骤 4: 克隆 ImmortalWrt 源码
     # 将源码克隆到 /srcdir 以获得更大的磁盘空间
     # 并通过软链接关联到工作区
-    # REPO_BRANCH 由 github.ref_name 驱动，本仓库分支名须与 ponwrt 分支名一致
     # ----------------------------------------------------------
     - name: Clone source code
       working-directory: /srcdir
@@ -166,9 +145,9 @@ jobs:
     #
     # key = ${{ env.CONFIG_NAME }} + -dl- / -ccache- + 配置内容哈希，前缀不再是写死的设备名。
     # 设备名前置（而不是跟在 immortalwrt- 这类公共前缀之后）是必须的：restore-keys 按字符串
-    # 前缀匹配，`immortalwrt-dl-an7581-` 恰好是 `immortalwrt-dl-an7583-gpon-<hash>` 的前缀，
+    # 前缀匹配，`immortalwrt-dl-an7583-` 恰好是 `immortalwrt-dl-an7583-gpon-<hash>` 的前缀，
     # 两条分支就会互相命中对方缓存（缓存虽按分支隔离，但默认分支 master 创建的条目各分支都能恢复）。
-    # 前置后 an7581- / an7581-gpon- / an7583-gpon- / mt7981- 四组前缀互不为前缀。
+    # 前置后 an7583- / an7583-gpon- / an7583-gpon- / mt7981- 四组前缀互不为前缀。
     #
     # 前缀之后仍要拼 hashFiles：actions/cache 只在主 key 未精确命中时才保存缓存，
     # 纯常量 key 一旦命中就永久不再更新（改配置也不会失效），
@@ -229,9 +208,8 @@ jobs:
     # ----------------------------------------------------------
     # 步骤 6: 加载 feeds 源
     # GPON 所需的 pon_drivers / pon_userspace 两个 fork 源由 PonWrt 的
-    # 对应分支 (REPO_BRANCH = github.ref_name) 自带，本仓库不放 feeds.conf.default
-    # 去覆盖，避免源码与编译配置耦合；仅当根目录存在该文件时才 mv 覆盖
-    # 然后执行 before-update-custom.sh (可添加第三方 feed)
+    # AN7583-GPON 分支自带，本仓库不放 feeds.conf.default 去覆盖；
+    # 仅当根目录存在该文件时才 mv 覆盖，然后执行 before-update-custom.sh
     # ----------------------------------------------------------
     - name: Load custom feeds
       run: |
@@ -354,7 +332,6 @@ jobs:
     # 单线程仍失败则开启详细日志 (V=s) 便于排查
     # 命令行不再传 CONFIG_CCACHE=y：缓存开关已由步骤 10 按触发表单写进 .config，
     # 回退的三条 make 都读同一份 .config，不必各带一遍参数。
-    # DEVICE_NAME / FILE_DATE 由 Setup 步骤和此处写入 GITHUB_ENV，后续步骤直接引用。
     # ----------------------------------------------------------
     - name: Compile the firmware
       id: compile
@@ -378,7 +355,6 @@ jobs:
     # 只复制可刷写的固件镜像 (*.bin / *.itb) 到 release/<设备>/ 散文件目录
     # manifest/buildinfo/sha256sums/json 等非固件附属文件不保留
     # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
-    # SUBTARGET 由 Setup 步骤推导 (an7581 / an7583)，产物路径自动适配
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
@@ -450,14 +426,13 @@ jobs:
       # ----------------------------------------------------------
       # 步骤 3: 生成 Release 标签和说明
       # 标签格式: ImmortalWrt_年.月.日-时分
-      # 说明文字由 DEVICE_MODEL (Setup 步骤推导) 和 SUBTARGET 自动填充
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
         run: |
           echo "release_tag=ImmortalWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "ImmortalWrt for ${DEVICE_MODEL} (Airoha ${SUBTARGET^^})" >> release.txt
+          echo "ImmortalWrt for Nokia XG-040G-MF (Airoha AN7583)" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
