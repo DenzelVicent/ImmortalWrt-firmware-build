@@ -5,7 +5,7 @@
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
-name: Build ImmortalWrt Firmware (AN7581 GPON)
+name: Build ImmortalWrt Firmware (AN7583 GPON)
 on:
   # 定时编译 (默认关闭，取消注释即可启用，cron 使用 UTC 时间)
   # schedule:
@@ -48,12 +48,12 @@ env:
   # 工作流把它复制成 openwrt/.config。按型号命名是为了和"编译期真正的 .config"区分开，
   # 也避免和 configs/ 下那份从源码仓库拷来的参考配置撞名。
   # 注意：hashFiles 只接受字面量，所以这里和 cache key 里的文件名须保持一致。
-  CONFIG_FILE: an7581-gpon.config
+  CONFIG_FILE: an7583-gpon.config
   # 缓存 key 的可读前缀：就是上面配置文件名去掉 .config 后缀，换设备时这两行成对一起改
   # (key 拼成 ${{ env.CONFIG_NAME }}-dl-<hash> / -ccache-<hash>)。
   # hashFiles 的参数按 GitHub 规定只能是字面量/glob、不接受变量，所以下面两条 key 里
   # 的配置文件名还得再同步一次。
-  CONFIG_NAME: an7581-gpon
+  CONFIG_NAME: an7583-gpon
   # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
   SELF_BEFORE_SH: before-update-custom.sh
   # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
@@ -192,7 +192,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openwrt/dl
-        key: ${{ env.CONFIG_NAME }}-dl-${{ hashFiles('feeds.conf.default', 'an7581-gpon.config') }}
+        key: ${{ env.CONFIG_NAME }}-dl-${{ hashFiles('feeds.conf.default', 'an7583-gpon.config') }}
         restore-keys: |
           ${{ env.CONFIG_NAME }}-dl-
 
@@ -212,7 +212,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openwrt/.ccache
-        key: ${{ env.CONFIG_NAME }}-ccache-${{ hashFiles('feeds.conf.default', 'an7581-gpon.config') }}
+        key: ${{ env.CONFIG_NAME }}-ccache-${{ hashFiles('feeds.conf.default', 'an7583-gpon.config') }}
         restore-keys: |
           ${{ env.CONFIG_NAME }}-ccache-
 
