@@ -1,8 +1,8 @@
-# ImmortalWrt 固件云编译 (Airoha AN7581)
+# ImmortalWrt 固件云编译 (Airoha AN758x)
 
 > 源码：[ImmortalWrt](https://github.com/DenzelVicent/ponwrt) | 基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt)
 
-本仓库用于云编译 ImmortalWrt 固件，当前编译目标为 Nokia XG-040G-MD (Airoha AN7581 平台)。
+本仓库用 GitHub Actions 云编译 Airoha AN758x 平台的光猫固件。三个编译目标（AN7581 XGS-PON、AN7581 GPON、AN7583 GPON）都在本分支上，各自一份工作流和一份设备配置文件，互不干扰；要编哪台就在 Actions 页面选对应的工作流。
 
 ## 免责声明
 
@@ -13,6 +13,22 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 使用者应自行确保相关操作符合当地法律法规及运营商相关规定。请勿将本项目用于未经授权的网络接入、冒用或复制他人设备身份，或干扰运营商网络正常运行。
 
 因刷写、配置或使用本项目产生的设备故障、网络服务异常及其他后果，由使用者自行承担。
+
+## 编译目标一览
+
+三份配置和脚本共用，只有下面这几处按目标区分。要新增一个编译目标，复制一份工作流改这几个值即可。
+
+| 工作流 | 目标设备 | 源码分支 (`REPO_BRANCH`) | 设备配置 (`CONFIG_FILE`) | 缓存前缀 (`CONFIG_NAME`) | Profile (`SUBTARGET`) |
+| --- | --- | --- | --- | --- | --- |
+| `build-an7581-immortalwrt.yml` | Nokia XG-040G-MD (AN7581, XGS-PON) | `master` | `an7581.config` | `an7581` | `an7581` |
+| `build-an7581-gpon-immortalwrt.yml` | Nokia XG-040G-MD (AN7581, GPON) | `AN7581-GPON` | `an7581-gpon.config` | `an7581-gpon` | `an7581` |
+| `build-an7583-gpon-immortalwrt.yml` | Nokia XG-040G-MF (AN7583, GPON) | `AN7583-GPON` | `an7583-gpon.config` | `an7583-gpon` | `an7583` |
+
+> `REPO_BRANCH` 指向 PonWrt 源码仓库的分支：GPON 两个目标用的是含 GPON 内核 patch 的分支，
+> XGS-PON 用的是纯净基线 `master`。源码分支写死在各自工作流的 `env` 段，不由本仓库分支名推导。
+>
+> `CONFIG_NAME` 是缓存 key 的前缀，三个值（外加 MT7981 那条分支的 `mt7981`）互不为前缀，
+> 所以同一分支上的三份工作流不会恢复到彼此的缓存。
 
 ## 支持设备
 
@@ -28,6 +44,8 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 | AN7581 | ZNXT ZN504XG-D | `znxt_zn504xg-d` | `reservearea` |
 | AN7581 | ZNXT ZN515XG-D | `znxt_zn515xg-d` | `reservearea` |
 | AN7583 | Nokia XG-040G-MF | `nokia_xg-040g-mf`、`nokia_xg-040g-mf-ubi` | `bosa`、`ri` |
+
+三份云编译配置各自只选中一台设备（`nokia_xg-040g-md-ubi` 或 `nokia_xg-040g-mf-ubi`），上表是平台支持的完整设备清单。
 
 ## 默认配置
 
@@ -68,7 +86,7 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 | `airoha-ponctl` | PON 控制工具 |
 | `airoha-pond` | PON 守护进程 |
 | `airoha-pon-debug` | PON 调试工具 |
-| `airoha-en7581-npu-firmware` | EN7581 NPU 固件 |
+| `airoha-en7581-npu-firmware` | EN7581 NPU 固件（AN7583 配置里为 `airoha-an7583-npu-firmware`） |
 
 ### 内核模块
 
@@ -94,17 +112,26 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 
 ```
 ├── .github/workflows/
-│   └── build-an7581-immortalwrt.yml  # GitHub Actions 编译工作流
-├── an7581.config               # 云编译配置（工作流 CONFIG_FILE 指向它）
-├── configs/                     # 从源码仓库拷来的参考配置，工作流不读取
-│   └── an7581.config            # AN7581 平台完整配置 (menuconfig 展开结果)
-├── before-update-custom.sh     # feeds 更新前执行的自定义脚本
-└── after-update-custom.sh      # feeds 更新后执行的自定义脚本
+│   ├── build-an7581-immortalwrt.yml       # AN7581 XGS-PON 固件编译
+│   ├── build-an7581-gpon-immortalwrt.yml  # AN7581 GPON 固件编译
+│   └── build-an7583-gpon-immortalwrt.yml  # AN7583 GPON 固件编译
+├── an7581.config                  # 云编译配置（XGS-PON 工作流的 CONFIG_FILE）
+├── an7581-gpon.config             # 云编译配置（AN7581 GPON 工作流的 CONFIG_FILE）
+├── an7583-gpon.config             # 云编译配置（AN7583 GPON 工作流的 CONFIG_FILE）
+├── configs/                       # 从源码仓库拷来的参考配置，工作流不读取
+│   ├── an7581.config              # AN7581 全设备配置（menuconfig 完整展开结果）
+│   ├── an7583.config              # AN7583 全设备配置（menuconfig 完整展开结果）
+│   └── release.config             # 发布配置增量
+├── before-update-custom.sh        # feeds 更新前执行的自定义脚本
+└── after-update-custom.sh         # feeds 更新后执行的自定义脚本
 ```
 
 > 设备配置按型号命名放在仓库根，是为了和编译期真正的 `openwrt/.config` 区分开：
-> 工作流把根目录的 `an7581.config` 复制成 `openwrt/.config`，再按触发表单追加缓存开关，
-> 然后 `make defconfig` 展开。`configs/` 下那份同名文件只是参考，不参与编译。
+> 工作流把自己那份复制成 `openwrt/.config`，再按触发表单追加缓存开关，然后 `make defconfig` 展开。
+> `configs/` 下的同名文件只是参考，不参与编译。
+>
+> 配置文件保留三份、不并成一份，是因为缓存 key 的哈希参数（`hashFiles`）按 GitHub 规定只能是
+> 字面量；各工作流只哈希自己那份，改 AN7583 的配置不会让 AN7581 的缓存失效。
 >
 > 本仓库根目录**不放** `feeds.conf.default`（工作流留着 `[ -e ]` 覆盖入口，按需自建）。
 
@@ -119,17 +146,23 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 
 ### `after-update-custom.sh`
 
-在 feeds 安装**后**、编译**前**执行，用于修改固件默认参数。当前内容均为注释示例：
+在 feeds 安装**后**、编译**前**执行，用于修改固件默认参数。三份编译目标共用这一个脚本。当前内容均为注释示例：
 
-- 取消注释 `sed` 行可修改默认 LAN IP（当前为 `192.168.1.1`）
+- `sed` 改默认 LAN IP 那一行现在是注释状态，三个目标都用原生 `192.168.1.1`。
+  取消注释会让**三份产出的固件一起**改掉默认地址，只想改某一台时不要动这里，
+  改各自工作流的 `env` 段另加变量。
 - 可添加其他 `sed` 命令修改 DHCP、主机名等默认配置
 
-### `feeds.conf.default`
+### feeds 源
 
-覆盖源码自带的 feeds 源配置。除 ImmortalWrt 官方源外，额外包含：
+本仓库不带 `feeds.conf.default`，用的是各源码分支自带的那份。三个分支都含 `pon_drivers`（Airoha PON 硬件驱动）与 `pon_userspace`（LuCI/ponctl/pond 等用户空间工具）两个 feed，区别只在指向哪个 fork：
 
-- `pon_drivers` — Airoha PON 硬件驱动
-- `pon_userspace` — Airoha PON 用户空间工具
+| 源码分支 | `pon_drivers` / `pon_userspace` 指向 |
+| --- | --- |
+| `master` | 上游 `pbs05/openwrt-pon-drivers`、`pbs05/openwrt-pon-userspace` |
+| `AN7581-GPON` / `AN7583-GPON` | `DenzelVicent` 的 fork（含 GPON 兼容性改造） |
+
+改 feed 源只改源码仓库那一处，源码与编译配置各管各的。若确需临时换源，在本仓库根目录新建 `feeds.conf.default`，工作流会 `mv` 到源码目录并计入 `dl/` 缓存 key。
 
 ## 云编译
 
@@ -138,42 +171,54 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 1. 释放 Runner 磁盘空间 (约 6GB)
 2. 检出本仓库配置文件与脚本
 3. 安装编译依赖工具链
-4. 克隆 ImmortalWrt 源码到 `/srcdir` (更大磁盘)
+4. 按工作流 `env.REPO_BRANCH` 克隆 ImmortalWrt 源码到 `/srcdir` (更大磁盘)
 5. 缓存 `dl/` 下载目录与 `openwrt/.ccache`（key = 工作流 env 里的 `CONFIG_NAME` + `-dl-`/`-ccache-` + 配置内容哈希；`CONFIG_NAME` 与 `CONFIG_FILE` 成对定义，开关见下方"触发方式"）
-6. 覆盖 feeds 源，执行 `before-update-custom.sh`
+6. 加载 feeds 源（本仓库不带 `feeds.conf.default`，用源码分支自带的那份），执行 `before-update-custom.sh`
 7. 更新并安装 feeds
 8. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
-9. 将仓库根的 `an7581.config`（已含 release 增量）复制为 `openwrt/.config`，触发表单勾选 `use_ccache` 时追加 `CONFIG_CCACHE=y` → `make defconfig` 展开
+9. 将工作流 `CONFIG_FILE` 指向的那份配置（已含 release 增量）复制为 `openwrt/.config`，触发表单勾选 `use_ccache` 时追加 `CONFIG_CCACHE=y` → `make defconfig` 展开
 10. 执行 `after-update-custom.sh` 修改默认参数
 11. 预下载软件包源码 (`make download`)
-12. 并行编译固件 (失败自动回退单线程；缓存开关取自步骤 9 写入的 .config，命令行不再带参数)
-13. 收集固件镜像，发布到 GitHub Release
+12. 编译固件：全并发 → 同级并发重试 → 才降级 `make -j1 V=s`（缓存开关取自步骤 9 写入的 .config，命令行不再带参数）
+13. 收集固件镜像到 `release/<设备>/`，上传 artifact，打包 `tar.zst` 发布到 GitHub Release
 14. 清理旧 workflow runs (保留 7 天 / 至少 3 条) 和旧 Release (保留最近 3 个)
 
 ### 触发方式
 
-- **手动触发**: GitHub Actions 页面点击 "Run workflow"，选择分支并设置两个缓存开关：
-  - `use_dl_cache` — `dl/` 软件包源码下载缓存。改了某个 package 的源码版本或下载地址
-    （Makefile 里的 `PKG_VERSION` / `PKG_SOURCE_VERSION` / `PKG_SOURCE_URL`）而缓存里仍是同名旧包时
-    取消勾选，本趟全部重新下载；这些字段不在缓存 key 的哈希范围内，改了不会自动失效。
-  - `use_ccache` — `openwrt/.ccache` 编译对象缓存。首次冷编译、或怀疑产物不对需要排除 ccache 时取消勾选。
-  取消勾选只是这一趟跳过对应的 `Cache ...` 步骤（既不恢复也不保存），同时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目，防止下次打开开关时恢复到旧缓存；要彻底丢弃旧条目也可以直接去 仓库 Settings → Actions → Caches 手动删除。
-- **定时编译**: 编辑 workflow 文件取消 `schedule` 注释 (UTC 时间)
+在 GitHub Actions 页面左侧**先选工作流**（三份对应三台设备），再点 "Run workflow"，设置两个缓存开关：
+
+- `use_dl_cache` — `dl/` 软件包源码下载缓存。改了某个 package 的源码版本或下载地址
+  （Makefile 里的 `PKG_VERSION` / `PKG_SOURCE_VERSION` / `PKG_SOURCE_URL`）而缓存里仍是同名旧包时
+  取消勾选，本趟全部重新下载；这些字段不在缓存 key 的哈希范围内，改了不会自动失效。
+- `use_ccache` — `openwrt/.ccache` 编译对象缓存。首次冷编译、或怀疑产物不对需要排除 ccache 时取消勾选。
+
+取消勾选只是这一趟跳过对应的 `Cache ...` 步骤（既不恢复也不保存），同时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目，防止下次打开开关时恢复到旧缓存；要彻底丢弃旧条目也可以直接去 仓库 Settings → Actions → Caches 手动删除。
+
+定时编译：编辑对应 workflow 文件取消 `schedule` 注释 (UTC 时间)。
 
 ### 自定义配置
 
-- 修改 `an7581.config` 调整软件包和内核模块（`configs/` 下的参考配置改了不影响云编译，工作流不读它）
-- 修改 `after-update-custom.sh` 自定义默认 IP、DHCP 等
-- 修改 `.github/workflows/build-an7581-immortalwrt.yml` 的 `env` 段切换设备或源码分支
+- 改某台设备的软件包和内核模块，改它自己那份配置（`an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`）；`configs/` 下的参考配置改了不影响云编译，工作流不读它
+- 改默认 IP、DHCP 等参数改 `after-update-custom.sh`，注意它对三份产出生效
+- 换源码分支只改对应工作流 `env` 段的 `REPO_BRANCH`，本仓库的分支名不参与推导
+- 新增编译目标：复制一份工作流，改 `name:`、`REPO_BRANCH`、`CONFIG_FILE`、`CONFIG_NAME`、`DEVICE_NAME`、`SUBTARGET`，以及两处 cache key 里 `hashFiles` 的配置文件名（`CONFIG_NAME` 必须与现有各前缀互不为前缀）
 
 ## 本地编译
+
+三个目标只是"克隆哪个源码分支 + 拷哪份配置"不同，其余步骤一致：
+
+| 目标 | `git clone -b <分支>` | `cp <配置> .config` |
+| --- | --- | --- |
+| AN7581 XGS-PON | `master` | `an7581.config` |
+| AN7581 GPON | `AN7581-GPON` | `an7581-gpon.config` |
+| AN7583 GPON | `AN7583-GPON` | `an7583-gpon.config` |
 
 ```sh
 # 安装编译所需的工具链和库
 sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
-# 拉取源码
-git clone https://github.com/pbs05/ponwrt.git
+# 拉取源码（分支按上表选，这里以 AN7581 GPON 为例）
+git clone -b AN7581-GPON https://github.com/DenzelVicent/ponwrt.git
 cd ponwrt
 
 # 更新并安装 feeds
@@ -184,16 +229,15 @@ cd ponwrt
 git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/luci-app-lucky
 git clone --depth 1 https://github.com/DenzelVicent/luci-app-airoha-npu.git package/luci-app-airoha-npu
 
-# 选择配置
-cp configs/an7581.config .config
-# 若目标是 AN7583，改用: cp configs/an7583.config .config
+# 选择配置（按上表选对应那份）
+cp an7581-gpon.config .config
 
 # 开始编译
 make defconfig
 make -j$(nproc)
 ```
 
-固件位于 `bin/targets/airoha/an7581/` 或 `bin/targets/airoha/an7583/`。
+固件位于 `bin/targets/airoha/an7581/`（AN7581 两个目标）或 `bin/targets/airoha/an7583/`（AN7583 目标）。
 
 ## 刷入
 
