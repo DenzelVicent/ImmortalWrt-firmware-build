@@ -217,8 +217,10 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 # 安装编译所需的工具链和库
 sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
-# 拉取源码（分支按上表选，这里以 AN7581 GPON 为例）
-git clone -b AN7581-GPON https://github.com/DenzelVicent/ponwrt.git
+# 拉取源码（分支按上表选，这里以 AN7581 XSGPON 为例）
+git clone -b master https://github.com/DenzelVicent/ponwrt.git
+# git clone -b AN7581-GPON https://github.com/DenzelVicent/ponwrt.git
+# git clone -b AN7583-GPON https://github.com/DenzelVicent/ponwrt.git
 cd ponwrt
 
 # 更新并安装 feeds
@@ -230,7 +232,9 @@ git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/luci-ap
 git clone --depth 1 https://github.com/DenzelVicent/luci-app-airoha-npu.git package/luci-app-airoha-npu
 
 # 选择配置（按上表选对应那份）
-cp an7581-gpon.config .config
+cp an758.config .config
+# cp an7581-gpon.config .config
+# cp an7583-gpon.config .config
 
 # 开始编译
 make defconfig
