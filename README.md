@@ -133,8 +133,9 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 │   ├── an7581.config              # AN7581 全设备配置（menuconfig 完整展开结果）
 │   ├── an7583.config              # AN7583 全设备配置（menuconfig 完整展开结果）
 │   └── release.config             # 发布配置增量
-├── before-update-custom.sh        # feeds 更新前执行的自定义脚本
-└── after-update-custom.sh         # feeds 更新后执行的自定义脚本
+├── add-feed-sources.sh            # 插入点 1：feeds update 之前，增删第三方 feed 源
+├── clone-packages.sh              # 插入点 2：feeds install 之后，clone 非 feed 格式的第三方包
+└── set-firmware-defaults.sh       # 插入点 3：make defconfig 之后，改固件出厂默认值
 ```
 
 > 设备配置按型号命名放在仓库根，是为了和编译期真正的 `openwrt/.config` 区分开：
@@ -148,21 +149,38 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 
 ## 脚本说明
 
-### `before-update-custom.sh`
+三个脚本对应编译流程里的三个插入点，工作流按 `env` 段的 `SCRIPT_ADD_FEED_SOURCES` /
+`SCRIPT_CLONE_PACKAGES` / `SCRIPT_SET_FIRMWARE_DEFAULTS` 三个变量调用。文件名写"做什么"，
+执行阶段写在各脚本的头注释里；三份编译目标共用同一批脚本，改动对三份产出同时生效。
 
-在 feeds 更新**前**执行，用于修改 feeds 源。当前内容均为注释示例：
+### `add-feed-sources.sh`
+
+feeds 更新**前**执行，改 `feeds.conf.default`。当前内容均为注释示例：
 
 - 取消注释可启用 `helloworld` 等第三方 feed
 - 可添加 PassWall、kenzok8 等软件源
+- feed 名只能用字母数字下划线，带连字符会让 `feeds update` 报 `Syntax error in feeds.conf.default`
 
-### `after-update-custom.sh`
+### `clone-packages.sh`
 
-在 feeds 安装**后**、编译**前**执行，用于修改固件默认参数。三份编译目标共用这一个脚本。当前内容均为注释示例：
+feeds 安装**后**、`make defconfig` **前**执行，clone 不是 feed 格式的第三方包到 `package/<包名>/`。
+位置是硬约束：这些包的依赖写着 `+luci-base` 这类 feed 包，提前 clone 会让 `make defconfig`
+静默跳过整包 —— 固件里没有对应界面但编译不报错（2026-10-10 踩过，见提交 `77684b6`）。
+本地编译要在 `./scripts/feeds install -a` 之后手动跑一遍同样的 clone。当前预置：
+
+- `luci-app-lucky`（clone 失败只告警，不中断编译）
+- `luci-app-airoha-npu`（AN758x 平台专用，失败打 `::error::`）
+
+### `set-firmware-defaults.sh`
+
+`make defconfig` **后**、编译**前**执行，用 `sed` 改源码树里会被装进 rootfs 的文件，
+即改固件的出厂默认值。恢复出厂和 `sysupgrade -n` 之后仍是这里的值。当前内容均为注释示例：
 
 - `sed` 改默认 LAN IP 那一行现在是注释状态，三个目标都用原生 `192.168.1.1`。
   取消注释会让**三份产出的固件一起**改掉默认地址，只想改某一台时不要动这里，
   改各自工作流的 `env` 段另加变量。
-- 可添加其他 `sed` 命令修改 DHCP、主机名等默认配置
+- 可添加其他 `sed` 命令修改 DHCP、主机名等默认配置（DHCP 地址池出厂值是
+  `start=100` / `limit=150`，即 `.100`–`.249`，一般不必显式改）
 
 ### feeds 源
 
@@ -184,15 +202,16 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 3. 安装编译依赖工具链
 4. 按工作流 `env.REPO_BRANCH` 克隆 ImmortalWrt 源码到 `/srcdir` (更大磁盘)
 5. 缓存 `dl/` 下载目录与 `openwrt/.ccache`（key = 工作流 env 里的 `CONFIG_NAME` + `-dl-`/`-ccache-` + 配置内容哈希；`CONFIG_NAME` 与 `CONFIG_FILE` 成对定义，开关见下方"触发方式"）
-6. 加载 feeds 源（本仓库不带 `feeds.conf.default`，用源码分支自带的那份），执行 `before-update-custom.sh`
+6. 加载 feeds 源（本仓库不带 `feeds.conf.default`，用源码分支自带的那份），执行 `add-feed-sources.sh`
 7. 更新并安装 feeds
-8. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
-9. 将工作流 `CONFIG_FILE` 指向的那份配置（已含 release 增量）复制为 `openwrt/.config`，触发表单勾选 `use_ccache` 时追加 `CONFIG_CCACHE=y` → `make defconfig` 展开
-10. 执行 `after-update-custom.sh` 修改默认参数
-11. 预下载软件包源码 (`make download`)
-12. 编译固件：全并发 → 同级并发重试 → 才降级 `make -j1 V=s`（缓存开关取自步骤 9 写入的 .config，命令行不再带参数）
-13. 收集固件镜像到 `release/<设备>/`，上传 artifact，打包 `tar.zst` 发布到 GitHub Release
-14. 清理旧 workflow runs (保留 7 天 / 至少 3 条) 和旧 Release (保留最近 3 个)
+8. 执行 `clone-packages.sh` clone 非 feed 格式的第三方包（必须在 feeds install 之后，理由见"脚本说明"）
+9. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
+10. 将工作流 `CONFIG_FILE` 指向的那份配置（已含 release 增量）复制为 `openwrt/.config`，触发表单勾选 `use_ccache` 时追加 `CONFIG_CCACHE=y` → `make defconfig` 展开
+11. 执行 `set-firmware-defaults.sh` 修改固件出厂默认参数
+12. 预下载软件包源码 (`make download`)
+13. 编译固件：全并发 → 同级并发重试 → 才降级 `make -j1 V=s`（缓存开关取自步骤 10 写入的 .config，命令行不再带参数）
+14. 收集固件镜像到 `release/<设备>/`，上传 artifact，打包 `tar.zst` 发布到 GitHub Release
+15. 清理旧 workflow runs (保留 7 天 / 至少 3 条) 和旧 Release (保留最近 3 个)
 
 ### 触发方式
 
@@ -210,7 +229,7 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 ### 自定义配置
 
 - 改某台设备的软件包和内核模块，改它自己那份配置（`an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`）；`configs/` 下的参考配置改了不影响云编译，工作流不读它
-- 改默认 IP、DHCP 等参数改 `after-update-custom.sh`，注意它对三份产出生效
+- 改默认 IP、DHCP 等参数改 `set-firmware-defaults.sh`，注意它对三份产出生效
 - 换源码分支只改对应工作流 `env` 段的 `REPO_BRANCH`，本仓库的分支名不参与推导
 - 新增编译目标：复制一份工作流，改 `name:`、`REPO_BRANCH`、`CONFIG_FILE`、`CONFIG_NAME`、`DEVICE_NAME`、`SUBTARGET`，以及两处 cache key 里 `hashFiles` 的配置文件名（`CONFIG_NAME` 必须与现有各前缀互不为前缀）
 
