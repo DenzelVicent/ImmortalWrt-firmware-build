@@ -56,10 +56,15 @@ env:
   # 目标设备和子目标（编译产物路径使用）
   DEVICE_NAME: nokia-xg-040g-mf
   SUBTARGET: an7583
-  # feeds 更新前执行的自定义脚本 (可用于添加第三方软件源)
-  SELF_BEFORE_SH: before-update-custom.sh
-  # feeds 更新后执行的自定义脚本 (可用于修改默认 IP、DHCP 等配置)
-  SELF_AFTER_SH: after-update-custom.sh
+  # 三个自定义脚本 = 编译流程里的三个插入点。文件名按"做什么"命名，
+  # "在哪个阶段执行、为什么只能在那个阶段"写在各自脚本的头注释里。
+  # 新增插入点时：这里加一行 + 工作流加一步调用 + 建对应脚本，三处一起。
+  # 1) ./scripts/feeds update -a 之前 —— 增删第三方 feed 源
+  SCRIPT_ADD_FEED_SOURCES: add-feed-sources.sh
+  # 2) ./scripts/feeds install -a 之后、make defconfig 之前 —— clone 非 feed 格式的第三方包
+  SCRIPT_CLONE_PACKAGES: clone-packages.sh
+  # 3) make defconfig 之后 —— 改固件出厂默认值 (默认 IP、DHCP 等)
+  SCRIPT_SET_FIRMWARE_DEFAULTS: set-firmware-defaults.sh
   # 编译环境时区
   TZ: Asia/Shanghai
   # 可选覆盖：本仓库根目录存在该文件时才 mv 覆盖源码自带 feeds，当前不存在
@@ -210,14 +215,14 @@ jobs:
     # 步骤 6: 加载 feeds 源
     # GPON 所需的 pon_drivers / pon_userspace 两个 fork 源由 PonWrt 的
     # AN7583-GPON 分支自带，本仓库不放 feeds.conf.default 去覆盖；
-    # 仅当根目录存在该文件时才 mv 覆盖，然后执行 before-update-custom.sh
+    # 仅当根目录存在该文件时才 mv 覆盖，然后执行 add-feed-sources.sh
     # ----------------------------------------------------------
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-        chmod +x $SELF_BEFORE_SH
+        chmod +x $SCRIPT_ADD_FEED_SOURCES
         cd openwrt
-        $GITHUB_WORKSPACE/$SELF_BEFORE_SH
+        $GITHUB_WORKSPACE/$SCRIPT_ADD_FEED_SOURCES
 
     # ----------------------------------------------------------
     # 步骤 7: 更新 feeds
@@ -235,24 +240,14 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 8.5: 克隆第三方包 (非 feed 格式)
-    # 必须在 feeds install 之后: 此时 luci-base 等 feed 包已安装为符号链接,
-    # 后续 make defconfig 才能正确解析 +luci-base 等运行时依赖
+    # 动作在 clone-packages.sh 里。"必须在 feeds install 之后"这条硬约束的来由写在该脚本
+    # 头注释里 (2026-10-10 airoha-npu 被 make defconfig 静默跳过，见 77684b6)，挪步骤前先读它。
     # ----------------------------------------------------------
     - name: Clone custom packages
-      working-directory: openwrt
       run: |
-        # Lucky (IPv6 端口转发/DDNS/公网访问)
-        git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/luci-app-lucky || {
-            echo "::warning::luci-app-lucky 克隆失败，该插件将不会包含在固件中"
-        }
-        # Airoha NPU 管理界面 (AN758x 平台专用)
-        git clone --depth 1 https://github.com/DenzelVicent/luci-app-airoha-npu.git package/luci-app-airoha-npu || {
-            echo "::error::luci-app-airoha-npu 克隆失败，NPU 管理界面将不会包含在固件中"
-        }
-        echo "=== 第三方包目录检查 ==="
-        for d in package/luci-app-lucky package/luci-app-airoha-npu; do
-            [ -d "$d" ] && echo "[OK] $d" || echo "[MISSING] $d"
-        done
+        chmod +x $SCRIPT_CLONE_PACKAGES
+        cd openwrt
+        $GITHUB_WORKSPACE/$SCRIPT_CLONE_PACKAGES
 
     # ----------------------------------------------------------
     # 步骤 9: 加载仓库签名密钥 (APK)
@@ -278,7 +273,7 @@ jobs:
     # 触发表单勾选 use_ccache 时，在这里追加 CONFIG_CCACHE=y，make 命令行不再带参数
     # 如果存在 files/ 目录则复制到 openwrt/files/ 作为固件内预置文件
     # make defconfig 根据 .config 生成完整配置
-    # 最后执行 after-update-custom.sh (修改默认 IP、DHCP 范围等)
+    # 最后执行 set-firmware-defaults.sh (修改默认 IP、DHCP 范围等)
     # ----------------------------------------------------------
     - name: Load custom config
       env:
@@ -302,7 +297,7 @@ jobs:
         if [ "$USE_CCACHE" = "true" ]; then
           printf '\n%s\n' 'CONFIG_CCACHE=y' >> openwrt/.config
         fi
-        chmod +x $SELF_AFTER_SH
+        chmod +x $SCRIPT_SET_FIRMWARE_DEFAULTS
         cd openwrt
         make defconfig
         # 兜底自检：开关被 defconfig 丢掉就直接失败，而不是白编一趟才发现命中率是 0
@@ -312,7 +307,7 @@ jobs:
             exit 1
           }
         fi
-        $GITHUB_WORKSPACE/$SELF_AFTER_SH
+        $GITHUB_WORKSPACE/$SCRIPT_SET_FIRMWARE_DEFAULTS
 
     # ----------------------------------------------------------
     # 步骤 11: 下载编译所需的软件包源码

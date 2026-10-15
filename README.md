@@ -33,11 +33,11 @@
 ## MT7981 平台默认配置
 
 - **默认 LAN IP**: `10.0.0.1`
-- **DHCP 范围**: `10.0.0.2` – `10.0.0.56`
+- **DHCP 范围**: `10.0.0.100` – `10.0.0.249`（dnsmasq 出厂模板的 `start=100` / `limit=150`；`set-firmware-defaults.sh` 里把池扩满整个 /24 的两行 `sed` 处于注释状态，无需显式配置）
 
 ## AN758x 平台默认配置
 
-- **默认 LAN IP**: `192.168.1.1`（三个编译目标一致；`AN7581` 分支 `after-update-custom.sh` 里改 IP 的 `sed` 行处于注释状态）
+- **默认 LAN IP**: `192.168.1.1`（三个编译目标一致；`AN7581` 分支 `set-firmware-defaults.sh` 里改 IP 的 `sed` 行处于注释状态）
 - **包管理器**: APK (openssl)，文件系统 SquashFS + UBIFS
 - **编译内核**: Linux 6.18
 
@@ -77,8 +77,9 @@
 | `luci-theme-argon` | Argon 主题（`luci-theme-bootstrap` 一并保留） |
 
 > 除 `luci-app-lucky` 与 `luci-app-airoha-npu` 外，上表都来自源码分支自带的 feeds。
-> 这两个不在任何 feed 内，由工作流在 `make defconfig` **之前** `git clone` 到 `package/`——
-> 顺序反了 kconfig 不会报错，只会静默不打包这两个界面。清单以各设备配置文件里的
+> 这两个不在任何 feed 内，改由各分支的 `clone-packages.sh` 在工作流 "Clone custom packages"
+> 步骤（`./scripts/feeds install -a` 之后、`make defconfig` **之前**）`git clone` 到 `package/`——
+> 顺序反了 kconfig 不会报错，只会静默不打包这两个界面（见提交 `77684b6`）。清单以各设备配置文件里的
 > `CONFIG_PACKAGE_luci-app-*=y` 为准，本地编译时同样要先克隆再 `make defconfig`。
 >
 > 每个 `luci-app-*` 都配套 `luci-i18n-<app>-zh-cn`，简体中文界面随镜像内置。
@@ -125,8 +126,9 @@
 | 文件 | 用途 |
 |---|---|
 | `an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`（均在 `AN7581` 分支根目录）、`mt7981.config`（在 `MT7981-hanwckf` 分支根目录） | 按设备型号命名的 OpenWrt menuconfig 配置，master 不存放配置文件 — 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的缓存开关追加 `CONFIG_CCACHE=y`（四份固件编译工作流都带 `use_dl_cache` / `use_ccache` 两个开关）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`，`an7581-` / `an7581-gpon-` / `an7583-gpon-` / `mt7981-` 四组前缀互不为前缀，同一分支上的多份工作流才不会恢复到彼此的缓存；改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里 `hashFiles` 的字面文件名（该参数不接受变量）；开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
-| `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
-| `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等（AN758x 三个编译目标共用一份，改动对三份产出同时生效） |
+| `add-feed-sources.sh` | feeds 更新**前**执行的钩子脚本 — 增删第三方软件源（改 `feeds.conf.default`）。feed 名只能用字母、数字、下划线，带连字符会让 `feeds update` 报语法错误 |
+| `clone-packages.sh` | feeds 安装**后**、`make defconfig` **前**执行的钩子脚本 — clone 非 feed 格式的第三方包到 `package/<包名>/`。位置是硬约束：提前 clone 时 `+luci-base` 这类 feed 依赖解析不了，`make defconfig` 会静默跳过整包（编译不报错，见提交 `77684b6`）。AN7581 分支预置 `luci-app-lucky` + `luci-app-airoha-npu`，MT7981-hanwckf 分支只有 `luci-app-lucky` |
+| `set-firmware-defaults.sh` | `make defconfig` **后**、编译**前**执行的钩子脚本 — 用 `sed` 改源码树里会被装进 rootfs 的文件，即固件的出厂默认值（恢复出厂和 `sysupgrade -n` 后仍是这里的值）。AN758x 三个编译目标共用一份，改动对三份产出同时生效；MT7981 分支把默认 LAN IP 改成 `10.0.0.1`，AN7581 分支该行保持注释 |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |
 | `files/` | （可选）预置文件目录，将文件覆盖到固件根文件系统 |
 
