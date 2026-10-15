@@ -185,9 +185,10 @@ jobs:
       run: |
         # 只在勾选清理时执行，位置必须在同层 Cache 步骤之前（理由见步骤 5 的头注释）。
         # gh cache list 默认只返回 30 条，--limit 100 已取到 API 单页上限。
+        # gh cache delete 没有 --yes/--confirm 参数：按 id 删除不会交互询问，多写这个参数只会 unknown flag 失败。
         gh cache list --limit 100 --json key,id | \
           jq -r '.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-dl-")) | .id' | \
-          xargs -r gh cache delete --yes
+          xargs -r gh cache delete
         # 删净断言：残留不为 0 就直接失败。同前缀条目超过单页上限、或别的 ref 还有同名前缀条目时，
         # 继续编译等于"以为清了其实仍用旧缓存"，正是最难查的静默失效。
         # 真撞到上限：去 仓库 Settings → Actions → Caches 手动删，或把上面的列举换成翻页拉取。
@@ -213,9 +214,10 @@ jobs:
       run: |
         # 只在勾选清理时执行，位置必须在同层 Cache 步骤之前（理由见步骤 5 的头注释）。
         # gh cache list 默认只返回 30 条，--limit 100 已取到 API 单页上限。
+        # gh cache delete 没有 --yes/--confirm 参数：按 id 删除不会交互询问，多写这个参数只会 unknown flag 失败。
         gh cache list --limit 100 --json key,id | \
           jq -r '.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-ccache-")) | .id' | \
-          xargs -r gh cache delete --yes
+          xargs -r gh cache delete
         # 删净断言：残留不为 0 就直接失败。同前缀条目超过单页上限、或别的 ref 还有同名前缀条目时，
         # 继续编译等于"以为清了其实仍用旧缓存"，正是最难查的静默失效。
         # 真撞到上限：去 仓库 Settings → Actions → Caches 手动删，或把上面的列举换成翻页拉取。
