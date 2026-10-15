@@ -139,7 +139,7 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 ```
 
 > 设备配置按型号命名放在仓库根，是为了和编译期真正的 `openwrt/.config` 区分开：
-> 工作流把自己那份复制成 `openwrt/.config`，再按触发表单追加缓存开关，然后 `make defconfig` 展开。
+> 工作流把自己那份复制成 `openwrt/.config`，再无条件追加 `CONFIG_CCACHE=y`，然后 `make defconfig` 展开。
 > `configs/` 下的同名文件只是参考，不参与编译。
 >
 > 配置文件保留三份、不并成一份，是因为缓存 key 的哈希参数（`hashFiles`）按 GitHub 规定只能是
@@ -201,28 +201,33 @@ feeds 安装**后**、`make defconfig` **前**执行，clone 不是 feed 格式�
 2. 检出本仓库配置文件与脚本
 3. 安装编译依赖工具链
 4. 按工作流 `env.REPO_BRANCH` 克隆 ImmortalWrt 源码到 `/srcdir` (更大磁盘)
-5. 缓存 `dl/` 下载目录与 `openwrt/.ccache`（key = 工作流 env 里的 `CONFIG_NAME` + `-dl-`/`-ccache-` + 配置内容哈希；`CONFIG_NAME` 与 `CONFIG_FILE` 成对定义，开关见下方"触发方式"）
+5. 缓存 `dl/` 下载目录与 `openwrt/.ccache`（默认启用；key = 工作流 env 里的 `CONFIG_NAME` + `-dl-`/`-ccache-` + 配置内容哈希；`CONFIG_NAME` 与 `CONFIG_FILE` 成对定义，清理开关见下方"触发方式"）
 6. 加载 feeds 源（本仓库不带 `feeds.conf.default`，用源码分支自带的那份），执行 `add-feed-sources.sh`
 7. 更新并安装 feeds
 8. 执行 `clone-packages.sh` clone 非 feed 格式的第三方包（必须在 feeds install 之后，理由见"脚本说明"）
 9. 加载 APK 仓库签名密钥 (可选，未配置则跳过)
-10. 将工作流 `CONFIG_FILE` 指向的那份配置（已含 release 增量）复制为 `openwrt/.config`，触发表单勾选 `use_ccache` 时追加 `CONFIG_CCACHE=y` → `make defconfig` 展开
+10. 将工作流 `CONFIG_FILE` 指向的那份配置（已含 release 增量）复制为 `openwrt/.config`，无条件追加 `CONFIG_CCACHE=y` → `make defconfig` 展开（展开后自检这一行还在）
 11. 执行 `set-firmware-defaults.sh` 修改固件出厂默认参数
 12. 预下载软件包源码 (`make download`)
-13. 编译固件：全并发 → 同级并发重试 → 才降级 `make -j1 V=s`（缓存开关取自步骤 10 写入的 .config，命令行不再带参数）
+13. 编译固件：全并发 → 同级并发重试 → 才降级 `make -j1 V=s`（ccache 取自步骤 10 写入的 .config，命令行不带参数）
 14. 收集固件镜像到 `release/<设备>/`，上传 artifact，打包 `tar.zst` 发布到 GitHub Release
 15. 清理旧 workflow runs (保留 7 天 / 至少 3 条) 和旧 Release (保留最近 3 个)
 
 ### 触发方式
 
-在 GitHub Actions 页面左侧**先选工作流**（三份对应三台设备），再点 "Run workflow"，设置两个缓存开关：
+在 GitHub Actions 页面左侧**先选工作流**（三份对应三台设备），再点 "Run workflow"，按需勾选两个缓存清理开关：
 
-- `use_dl_cache` — `dl/` 软件包源码下载缓存。改了某个 package 的源码版本或下载地址
+- `clean_dl_cache` — 先清空 `dl/` 下载缓存再编译。改了某个 package 的源码版本或下载地址
   （Makefile 里的 `PKG_VERSION` / `PKG_SOURCE_VERSION` / `PKG_SOURCE_URL`）而缓存里仍是同名旧包时
-  取消勾选，本趟全部重新下载；这些字段不在缓存 key 的哈希范围内，改了不会自动失效。
-- `use_ccache` — `openwrt/.ccache` 编译对象缓存。首次冷编译、或怀疑产物不对需要排除 ccache 时取消勾选。
+  勾选；这些字段不在缓存 key 的哈希范围内，改了不会自动失效。
+- `clean_ccache` — 先清空 `openwrt/.ccache` 编译对象缓存再编译。怀疑复用到了不对的产物时勾选。
 
-取消勾选只是这一趟跳过对应的 `Cache ...` 步骤（既不恢复也不保存），同时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目，防止下次打开开关时恢复到旧缓存；要彻底丢弃旧条目也可以直接去 仓库 Settings → Actions → Caches 手动删除。
+两层缓存默认都是启用的：`Cache ...` 步骤没有 if，恒定恢复 + 收尾保存，`CONFIG_CCACHE=y` 由
+`Load custom config` 步骤无条件写进 `.config`。勾选清理开关时，对应的 `Clear ... cache` 步骤排在
+同层 `Cache ...` 步骤**之前**，先删掉本设备前缀的条目，本趟恢复必然落空 → 全量下载/重编 →
+收尾把新条目存回去，一趟冷编译就把缓存重新灌满（旧写法"关掉开关"要付两趟才恢复热度）。
+没勾选时行为与改造前的"开关为 true"完全一致。删完有断言检查同前缀残留，没删净就直接失败，
+而不是静默用旧缓存；也可以直接去 仓库 Settings → Actions → Caches 手动删除。
 
 定时编译：编辑对应 workflow 文件取消 `schedule` 注释 (UTC 时间)。
 
