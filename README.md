@@ -33,7 +33,9 @@
 | `luci-app-eqos-mtk` | MTK QoS 带宽控制 |
 | `luci-app-mtwifi-cfg` | MTK WiFi 配置 |
 | `luci-app-upnp` | UPnP 自动端口映射 |
-| `luci-theme-argon` | Argon 主题 |
+| `luci-app-lucky` | Lucky 多合一工具（端口转发、DDNS、反向代理） |
+| `luci-app-smartdns` | SmartDNS 并发 DNS 解析（同时向多个上游查询、返回最快 IP，支持 DoT/DoH 加密上游；菜单「服务 → SmartDNS」）。核心和界面都在 `openwrt-21.02` 的 feeds 里 —— packages 的 `net/smartdns`（C 程序 v43，依赖 libpthread/libopenssl）和 luci 的 `luci-app-smartdns`（只带 js 视图与 `po/`，不带 `/etc/init.d`、`/etc/config`，服务与配置只有一套），无需 clone。出厂 `enabled` 为 `0`、监听 `6053`、`redirect` 为 `dnsmasq-upstream`（挂在 dnsmasq 上游、不抢 53），需在界面里手动启用 |
+| `luci-theme-argon` | Argon 主题（`luci-theme-bootstrap-mod` 一并保留） |
 
 ## 支持的设备
 
