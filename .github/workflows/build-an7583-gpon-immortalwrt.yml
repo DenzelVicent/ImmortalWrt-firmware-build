@@ -145,9 +145,10 @@ jobs:
     #
     # key = ${{ env.CONFIG_NAME }} + -dl- / -ccache- + 配置内容哈希，前缀不再是写死的设备名。
     # 设备名前置（而不是跟在 immortalwrt- 这类公共前缀之后）是必须的：restore-keys 按字符串
-    # 前缀匹配，`immortalwrt-dl-an7583-` 恰好是 `immortalwrt-dl-an7583-gpon-<hash>` 的前缀，
-    # 两条分支就会互相命中对方缓存（缓存虽按分支隔离，但默认分支 master 创建的条目各分支都能恢复）。
-    # 前置后 an7583- / an7583-gpon- / an7583-gpon- / mt7981- 四组前缀互不为前缀。
+    # 前缀匹配，`immortalwrt-dl-an7581-` 恰好是 `immortalwrt-dl-an7581-gpon-<hash>` 的前缀，
+    # 两条 key 就会互相命中对方缓存。三份编译目标现在同在 AN7581 一个分支上，缓存不再
+    # 靠分支隔离，"前缀互不为前缀"是唯一屏障（master 上三份副本产生的条目各分支都可恢复）。
+    # 前置后 an7581- / an7581-gpon- / an7583-gpon- / mt7981- 四组前缀互不为前缀。
     #
     # 前缀之后仍要拼 hashFiles：actions/cache 只在主 key 未精确命中时才保存缓存，
     # 纯常量 key 一旦命中就永久不再更新（改配置也不会失效），
@@ -365,11 +366,13 @@ jobs:
       run: |
         echo "DEVICE=$DEVICE_NAME" >> $GITHUB_ENV
         mkdir -p "release/$DEVICE_NAME"
+        # 产物目录用 SUBTARGET 拼，不在这里写死 an7581：三份 GPON/AN7581 工作流
+        # 同段保持同一写法，换设备时只改 env 的 SUBTARGET 一处
         for f in openwrt/bin/targets/airoha/${SUBTARGET}/*.bin openwrt/bin/targets/airoha/${SUBTARGET}/*.itb; do
           [ -e "$f" ] || continue
           cp "$f" "release/$DEVICE_NAME/"
         done
-        ls -l "release/$device"
+        ls -l "release/$DEVICE_NAME"
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------

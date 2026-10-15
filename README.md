@@ -10,10 +10,12 @@
 | 分支 | 说明 | 配置文件 |
 |---|---|---|
 | `master` | 总览分支，存放所有工作流模板（不存放设备配置） | — |
-| `AN7581` | AN7581 平台 XGS-PON 固件 | `an7581.config` |
-| `AN7581-GPON` | AN7581 平台 GPON 固件 (Nokia XG-040G-MD) | `an7581-gpon.config` |
-| `AN7583-GPON` | AN7583 平台 GPON 固件 (Nokia XG-040G-MF) | `an7583-gpon.config` |
+| `AN7581` | AN758x 平台三个编译目标（XGS-PON 与 GPON）合并在同一分支 | `an7581.config`、`an7581-gpon.config`、`an7583-gpon.config` |
 | `MT7981-hanwckf` | MT7981 平台固件 + U-Boot | `mt7981.config` |
+
+> 2026-10-15 起原 `AN7581-GPON` / `AN7583-GPON` 两个分支并入 `AN7581`：三份设备配置和三份工作流
+> 全部保留、不合并（各工作流只读自己那份配置，cache key 的 `hashFiles` 参数是字面量，并一会让
+> 改一台设备连带失效另两台的缓存），只有 README 合成一份。要编哪台设备，在 Actions 页面选对应工作流。
 
 ## 编译工作流
 
@@ -21,13 +23,23 @@
 |---|---|---|---|
 | `build-mt7981-immortalwrt.yml` | MT7981-hanwckf / master | 编译 MT7981 平台路由器 ImmortalWrt 固件 | 手动触发 (`workflow_dispatch`) |
 | `build-mt7981-u-boot.yml` | MT7981-hanwckf / master | 并行编译 MT7981 平台所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
-| `build-an7581-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫 ImmortalWrt 固件 (XGS-PON) | 手动触发 (`workflow_dispatch`) |
-| `build-gpon-firmware.yml` | AN7581-GPON / AN7583-GPON / master | 编译 AN758x 平台 GPON 固件（`REPO_BRANCH` 由 `github.ref_name` 自动适配） | 手动触发 (`workflow_dispatch`) |
+| `build-an7581-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫固件 (XGS-PON)，源码分支 `REPO_BRANCH=master` | 手动触发 (`workflow_dispatch`) |
+| `build-an7581-gpon-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫固件 (GPON)，源码分支 `REPO_BRANCH=AN7581-GPON` | 手动触发 (`workflow_dispatch`) |
+| `build-an7583-gpon-immortalwrt.yml` | AN7581 / master | 编译 AN7583 平台光猫固件 (GPON)，源码分支 `REPO_BRANCH=AN7583-GPON` | 手动触发 (`workflow_dispatch`) |
+
+> `REPO_BRANCH` 写死在各工作流的 `env` 段（指向 PonWrt 源码仓库的分支），不由本仓库分支名推导；
+> 这三份副本留在 master 是因为非默认分支的工作流必须先在默认分支存在才能手动运行。
 
 ## MT7981 平台默认配置
 
 - **默认 LAN IP**: `10.0.0.1`
 - **DHCP 范围**: `10.0.0.2` – `10.0.0.56`
+
+## AN758x 平台默认配置
+
+- **默认 LAN IP**: `192.168.1.1`（三个编译目标一致；`AN7581` 分支 `after-update-custom.sh` 里改 IP 的 `sed` 行处于注释状态）
+- **包管理器**: APK (openssl)，文件系统 SquashFS + UBIFS
+- 预装软件包清单见 `AN7581` 分支 README
 
 ## MT7981 平台预装插件
 
@@ -85,9 +97,9 @@
 
 | 文件 | 用途 |
 |---|---|
-| `an7581-gpon.config` / `an7583-gpon.config` / `an7581.config` / `mt7981.config` | 按设备型号命名的 OpenWrt menuconfig 配置，位于各自分支根目录（master 不存放配置文件）— 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的缓存开关追加 `CONFIG_CCACHE=y`（三个分支都有 `use_dl_cache` / `use_ccache` 两个开关）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备名要同步这两个变量和 key 里的哈希文件名；开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
+| `an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`（均在 `AN7581` 分支根目录）、`mt7981.config`（在 `MT7981-hanwckf` 分支根目录） | 按设备型号命名的 OpenWrt menuconfig 配置，master 不存放配置文件 — 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并按触发表的缓存开关追加 `CONFIG_CCACHE=y`（四份固件编译工作流都带 `use_dl_cache` / `use_ccache` 两个开关）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`，`an7581-` / `an7581-gpon-` / `an7583-gpon-` / `mt7981-` 四组前缀互不为前缀，同一分支上的多份工作流才不会恢复到彼此的缓存；改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里 `hashFiles` 的字面文件名（该参数不接受变量）；开关关掉时对应的 `Clear ... cache if disabled` 步骤会从 Actions 缓存存储里删除旧条目 |
 | `before-update-custom.sh` | feeds 更新前执行的钩子脚本 — 在此添加自定义软件源 |
-| `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等 |
+| `after-update-custom.sh` | feeds 更新后执行的钩子脚本 — 修改默认 IP、DHCP 范围等（AN758x 三个编译目标共用一份，改动对三份产出同时生效） |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |
 | `files/` | （可选）预置文件目录，将文件覆盖到固件根文件系统 |
 
