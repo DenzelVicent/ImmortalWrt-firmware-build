@@ -39,7 +39,7 @@
 
 - **默认 LAN IP**: `192.168.1.1`（三个编译目标一致；`AN7581` 分支 `after-update-custom.sh` 里改 IP 的 `sed` 行处于注释状态）
 - **包管理器**: APK (openssl)，文件系统 SquashFS + UBIFS
-- 预装软件包清单见 `AN7581` 分支 README
+- **编译内核**: Linux 6.18
 
 ## MT7981 平台预装插件
 
@@ -55,6 +55,33 @@
 | `luci-app-mtwifi-cfg` | MTK WiFi 配置 |
 | `luci-app-upnp` | UPnP 自动端口映射 |
 | `luci-theme-argon` | Argon 主题 |
+
+## AN758x 平台预装插件
+
+三个编译目标（AN7581 XGS-PON / AN7581 GPON / AN7583 GPON）的插件清单一致，仅 NPU 固件包按 SoC 区分。
+
+| 插件 | 说明 |
+|---|---|
+| `luci-app-adguardhome` | AdGuard Home DNS 过滤（同时预装 `adguardhome` 核心） |
+| `luci-app-airoha-npu` | Airoha NPU 硬件加速管理（AN7581 配 `airoha-en7581-npu-firmware`，AN7583 配 `airoha-an7583-npu-firmware`） |
+| `luci-app-autoreboot` | 定时自动重启 |
+| `luci-app-firewall` | 防火墙管理 |
+| `luci-app-hd-idle` | USB 硬盘自动休眠 |
+| `luci-app-lucky` | Lucky 多合一工具（端口转发、DDNS、反向代理） |
+| `luci-app-openclash` | OpenClash 代理客户端（LuCI 界面，内核需首次启动后下载） |
+| `luci-app-package-manager` | 软件包管理 |
+| `luci-app-pon` | PON 光猫管理（同时预装 `airoha-ponctl` / `airoha-pond` / `airoha-pon-debug`） |
+| `luci-app-samba4` | Samba4 文件共享服务 |
+| `luci-app-ttyd` | 网页终端（浏览器访问路由器 Shell） |
+| `luci-app-upnp` | UPnP 自动端口映射 |
+| `luci-theme-argon` | Argon 主题（`luci-theme-bootstrap` 一并保留） |
+
+> 除 `luci-app-lucky` 与 `luci-app-airoha-npu` 外，上表都来自源码分支自带的 feeds。
+> 这两个不在任何 feed 内，由工作流在 `make defconfig` **之前** `git clone` 到 `package/`——
+> 顺序反了 kconfig 不会报错，只会静默不打包这两个界面。清单以各设备配置文件里的
+> `CONFIG_PACKAGE_luci-app-*=y` 为准，本地编译时同样要先克隆再 `make defconfig`。
+>
+> 每个 `luci-app-*` 都配套 `luci-i18n-<app>-zh-cn`，简体中文界面随镜像内置。
 
 ## 支持的设备
 
