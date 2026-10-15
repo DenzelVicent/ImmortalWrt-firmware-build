@@ -54,6 +54,8 @@
 | `luci-app-eqos-mtk` | MTK QoS 带宽控制 |
 | `luci-app-mtwifi-cfg` | MTK WiFi 配置 |
 | `luci-app-upnp` | UPnP 自动端口映射 |
+| `luci-app-lucky` | Lucky 多合一工具（端口转发、DDNS、反向代理） |
+| `luci-app-smartdns` | SmartDNS 并发 DNS 解析（同时预装 `smartdns` 核心；出厂监听 6053 挂 dnsmasq 上游、`enabled` 为 `0` 需手动启用） |
 | `luci-theme-argon` | Argon 主题 |
 
 ## AN758x 平台预装插件
