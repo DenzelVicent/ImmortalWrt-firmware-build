@@ -9,7 +9,8 @@
 #       注入 CR 导致包损坏；这条规则把该风险钉死。
 #       （历史上 pon-packages/*.apk 由 CI 回推入库，2026-10-13 随
 #        build-pon-packages.yml 一并删除；规则保留，给以后手工放入 SDK 编译产物兜底。）
-# 维护: 四个分支（AN7581 / AN7581-gpon / MT7981-hanwckf / master）保持同一份内容，
+# 维护: 所有分支保持同一份内容（当前三个分支：AN7581 / MT7981-hanwckf / master；
+#       2026-10-15 原 AN7581-GPON、AN7583-GPON 两支已并入 AN7581，分支增减只改这一行）。
 #       新增跨平台脚本类型时按同样格式追加一行并同步到各分支。
 #       自检: `git ls-files --eol` 里除 *.apk（i/-text）外应全部是 i/lf；
 #       `git grep -I -l -P '\r' <分支>` 应为空（blob 内不含 CR）。
