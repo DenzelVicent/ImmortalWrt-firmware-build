@@ -52,11 +52,7 @@ jobs:
         include:
           - board: ax3000t
             multi_layout: 1
-          - board: ax3000t_an8855
-            multi_layout: 1
           - board: cmcc_rax3000m
-            multi_layout: 0
-          - board: cmcc_rax3000m-emmc
             multi_layout: 0
 
     steps:
