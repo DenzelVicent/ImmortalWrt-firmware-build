@@ -69,15 +69,26 @@ ImmortalWrt 是一个用于研究和开发的开源光猫固件项目。
 
 | 软件包 | 说明 |
 | --- | --- |
+| `luci-app-adguardhome` | AdGuard Home DNS 过滤（同时预装 `adguardhome` 核心） |
+| `luci-app-airoha-npu` | Airoha NPU 硬件加速管理 |
 | `luci-app-autoreboot` | 定时重启 |
 | `luci-app-firewall` | 防火墙管理 |
 | `luci-app-hd-idle` | 硬盘休眠管理 |
+| `luci-app-lucky` | Lucky 多合一工具（端口转发、DDNS、反向代理） |
 | `luci-app-openclash` | Clash 代理管理 |
 | `luci-app-package-manager` | 软件包管理 |
 | `luci-app-pon` | PON 光猫管理 |
 | `luci-app-samba4` | Samba 文件共享 |
 | `luci-app-ttyd` | Web 终端 |
 | `luci-app-upnp` | UPnP 管理 |
+
+> 上表按三份设备配置文件里实测的 `CONFIG_PACKAGE_luci-app-*=y` 列出，三个编译目标清单一致。
+> 每个 `luci-app-*` 都配套 `luci-i18n-<app>-zh-cn`（含 `luci-i18n-base-zh-cn`），简体中文界面内置；
+> 主题带 `luci-theme-argon`，`luci-theme-bootstrap` 一并保留。
+>
+> `luci-app-lucky` 与 `luci-app-airoha-npu` 不在任何 feed 内，由工作流在 `make defconfig` 之前
+> `git clone` 到 `package/`。顺序反了 kconfig 不报错，只会静默不打包这两个界面；
+> 本地编译同样要先克隆再 `make defconfig`（见下面"本地编译"一节）。
 
 ### PON 平台组件
 
