@@ -1,10 +1,11 @@
 # ============================================================
-# ImmortalWrt 固件编译工作流
-# 支持机型: 小米 AX3000T / CMCC RAX3000M (MT7981 平台)
+# ImmortalWrt 固件编译工作流 — CMCC RAX3000M
+# 源码: hanwckf/immortalwrt-mt798x (openwrt-21.02)
+# 配置: rax3000m.config (只启用本机型，AX3000T 见 build-ax3000t-immortalwrt.yml)
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
-name: Build ImmortalWrt Firmware (MT7981)
+name: Build ImmortalWrt Firmware (RAX3000M)
 on:
   # 定时编译 (默认关闭，取消注释即可启用，cron 使用 UTC 时间)
   # schedule:
@@ -45,12 +46,18 @@ env:
   REPO_BRANCH: openwrt-21.02
   # 自定义固件配置文件 (OpenWrt make menuconfig 生成，按设备型号命名)
   # 工作流把它复制成 openwrt/.config；按型号命名是为了与"编译期真正的 .config"区分开
-  CONFIG_FILE: mt7981.config
+  # 本机型只启用 cmcc_rax3000m；同平台的 AX3000T 走 build-ax3000t-immortalwrt.yml
+  CONFIG_FILE: rax3000m.config
   # 缓存 key 的可读前缀：就是上面配置文件名去掉 .config 后缀，换设备时这两行成对一起改
   # (key 拼成 ${{ env.CONFIG_NAME }}-dl-<hash> / -ccache-<hash>)。
   # hashFiles 的参数按 GitHub 规定只能是字面量/glob、不接受变量，所以下面两条 key 里
   # 的配置文件名还得再同步一次。
-  CONFIG_NAME: mt7981
+  CONFIG_NAME: rax3000m
+  # defconfig 结果自检的期望符号：换 target 或换设备时，和上面 CONFIG_FILE/CONFIG_NAME 一起改。
+  # 这两个符号一旦在 defconfig 后消失，说明 .config 与源码树不匹配（子目标改名、profile 改名），
+  # 后果不是报错而是静默跑错 target，"Load custom config" 步骤末尾有断言拦这种情况。
+  EXPECT_TARGET: CONFIG_TARGET_mediatek_mt7981
+  EXPECT_DEVICE: CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_cmcc_rax3000m
   # 三个自定义脚本 = 编译流程里的三个插入点。文件名按"做什么"命名，
   # "在哪个阶段执行、为什么只能在那个阶段"写在各自脚本的头注释里。
   # 新增插入点时：这里加一行 + 工作流加一步调用 + 建对应脚本，三处一起。
@@ -93,7 +100,7 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 2: 检出本仓库代码
-    # 将设备配置 mt7981.config、自定义脚本等文件拉取到工作区
+    # 将设备配置 rax3000m.config、自定义脚本等文件拉取到工作区
     # ----------------------------------------------------------
     - name: Checkout
       uses: actions/checkout@main
@@ -156,7 +163,9 @@ jobs:
     # 设备名前置（而不是跟在 immortalwrt- 这类公共前缀之后）是必须的：restore-keys 按字符串
     # 前缀匹配，`immortalwrt-dl-an7581-` 恰好是 `immortalwrt-dl-an7581-gpon-<hash>` 的前缀，
     # 两条 key 就会互相命中对方缓存（缓存虽按分支隔离，但默认分支 master 创建的条目各分支都能恢复）。
-    # 前置后 an7581- / an7581-gpon- / an7583-gpon- / mt7981- 四组前缀互不为前缀。
+    # 前置后 ax3000t- / rax3000m- / an7581- / an7581-gpon- / an7583-gpon- 五组前缀互不为前缀。
+    # 拆成两台设备的工作流后这条更关键：同一分支上两条工作流共用一个缓存命名空间
+    # (缓存按 ref 隔离、不按工作流隔离)，ax3000t- 前缀是它们不互相恢复对方 dl/ 和 .ccache 的唯一分隔。
     #
     # 前缀之后仍要拼 hashFiles：actions/cache 只在主 key 未精确命中时才保存缓存，
     # 纯常量 key 一旦命中就永久不再更新（改配置也不会失效），
@@ -169,11 +178,11 @@ jobs:
     #
     # ccache 路径必须是 openwrt/.ccache，不能写 ~/.ccache：
     # 源码是 hanwckf/immortalwrt-mt798x (openwrt-21.02)，其 rules.mk 里 CCACHE_DIR 默认取
-    # $(TOPDIR)/.ccache，而本分支 mt7981.config 只有 CONFIG_DEVEL=y、未设 CONFIG_CCACHE_DIR，
+    # $(TOPDIR)/.ccache，而本分支 rax3000m.config 只有 CONFIG_DEVEL=y、未设 CONFIG_CCACHE_DIR，
     # 所以编译实际写入的是 openwrt/.ccache。此前缓存 ~/.ccache 时两边不是同一目录，
     # 命中率恒为 0，白付 ccache 开销。命中率看构建日志末尾的 `ccache -s`（Makefile world 目标自带）。
     #
-    # ccache key 哈希仓库根的 mt7981.config（原先哈希的是 openwrt/.config）：那是被 defconfig
+    # ccache key 哈希仓库根的 rax3000m.config（原先哈希的是 openwrt/.config）：那是被 defconfig
     # 展开后的完整结果，会随 feed 内容一起变，而 openwrt 本身还是指向 /srcdir/openwrt 的
     # 符号链接，能不能取到没有日志可证。哈希仓库里的输入文件语义才明确。
     # 两条 key 的哈希参数与 AN7581 那三份保持一致（feeds.conf.default + 设备配置）。
@@ -203,7 +212,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openwrt/dl
-        key: ${{ env.CONFIG_NAME }}-dl-${{ hashFiles('feeds.conf.default', 'mt7981.config') }}
+        key: ${{ env.CONFIG_NAME }}-dl-${{ hashFiles('feeds.conf.default', 'rax3000m.config') }}
         restore-keys: |
           ${{ env.CONFIG_NAME }}-dl-
 
@@ -232,7 +241,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openwrt/.ccache
-        key: ${{ env.CONFIG_NAME }}-ccache-${{ hashFiles('feeds.conf.default', 'mt7981.config') }}
+        key: ${{ env.CONFIG_NAME }}-ccache-${{ hashFiles('feeds.conf.default', 'rax3000m.config') }}
         restore-keys: |
           ${{ env.CONFIG_NAME }}-ccache-
 
@@ -297,16 +306,26 @@ jobs:
         cp "$CONFIG_FILE" openwrt/.config
         # ccache 现在是常开，开关值落在 .config 里：rules.mk 的 ifneq ($(CONFIG_CCACHE),) 读的就是这个变量，
         # 与从前在 make 行传 CONFIG_CCACHE=y 等价。21.02 的 config CCACHE 同样是
-        # `bool "Use ccache" if DEVEL`，而 mt7981.config 第 53 行已有 CONFIG_DEVEL=y，
+        # `bool "Use ccache" if DEVEL`，而 rax3000m.config 第 53 行已有 CONFIG_DEVEL=y，
         # 符号可见，所以下面的 make defconfig 不会丢掉它（本步骤末尾有 grep 兜底自检）。
-        # 用 printf 且前置 \n：本分支 mt7981.config 的末行没有换行符，直接追加会和
-        # 最后一行粘成 CONFIG_PACKAGE_dnsmasq=nCONFIG_CCACHE=y 这样的无效行，
-        # 被 kconfig 静默忽略、ccache 等于没开。
+        # 用 printf 且前置 \n：万一配置文件末行漏了换行符，直接追加会和最后一行粘成
+        # CONFIG_PACKAGE_dnsmasq=nCONFIG_CCACHE=y 这样的无效行，被 kconfig 静默忽略、ccache 等于没开。
+        # (当前 rax3000m.config 末行带换行符，前置 \n 只是多出一个空行，防的是手工改配置时丢掉末行换行)
         printf '\n%s\n' 'CONFIG_CCACHE=y' >> openwrt/.config
         chmod +x $SCRIPT_SET_FIRMWARE_DEFAULTS
         cd openwrt
         make defconfig
-        # 兜底自检：CONFIG_CCACHE=y 被 defconfig 丢掉就直接失败，
+        # 兜底自检 1：target 与设备符号必须还在 defconfig 结果里。
+        # .config 和源码树不匹配时（换仓库、子目标或 profile 改名，例如主线 24.10 把 MT7981
+        # 归到 mediatek/filogic）defconfig 不报错，而是回落到默认 target 一路编到底，
+        # 产物整理取不到本设备目录、上传步骤全跳过，release job 照样建出一个空 Release。
+        for sym in "$EXPECT_TARGET" "$EXPECT_DEVICE"; do
+          grep -q "^${sym}=" .config || {
+            echo "::error::defconfig 结果里没有 $sym，$CONFIG_FILE 与源码 $REPO_URL ($REPO_BRANCH) 不匹配"
+            exit 1
+          }
+        done
+        # 兜底自检 2：CONFIG_CCACHE=y 被 defconfig 丢掉就直接失败，
         # 而不是白编一趟才发现命中率是 0
         grep -q '^CONFIG_CCACHE=y' .config || {
           echo "::error::CONFIG_CCACHE=y 没能进入 defconfig 结果，检查 $CONFIG_FILE 里是否有 CONFIG_DEVEL=y"
@@ -335,7 +354,7 @@ jobs:
     # 第二条若写成 -j1，等于把剩余所有包都改成串行，多花几十分钟到一小时。
     # 只有前两条都失败才降级 -j1 V=s：那种才是 OpenWrt 依赖图漏声明导致的并发竞态，
     # 需要串行才可能过，V=s 同时留下可排查的详细输出。
-    # 编译产物包含 AX3000T 和 RAX3000M 两个机型的所有变体
+    # 编译产物只有 RAX3000M：配置里启用了哪几个变体 (SPI-NAND / eMMC) 就出哪几个
     # ----------------------------------------------------------
     - name: Compile the firmware
       id: compile
@@ -390,22 +409,8 @@ jobs:
     # 每个型号一个独立 artifact, 下载后直接是各固件 bin, 便于单独取用
     # 与 Release 附件 (tar.zst 整包) 形态不同: artifact 供挑文件, Release 供整包下载
     # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
-    # 型号目录不存在时 (mt7981.config 未启用该设备) 跳过对应上传
+    # 型号目录不存在时 (rax3000m.config 未勾选该变体) 跳过对应上传
     # ----------------------------------------------------------
-    - name: Upload firmware xiaomi_mi-router-ax3000t
-      uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t/*') != '' && !cancelled()
-      with:
-        name: ImmortalWrt_firmware_xiaomi_mi-router-ax3000t${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t
-
-    - name: Upload firmware xiaomi_mi-router-ax3000t-an8855
-      uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t-an8855/*') != '' && !cancelled()
-      with:
-        name: ImmortalWrt_firmware_xiaomi_mi-router-ax3000t-an8855${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t-an8855
-
     - name: Upload firmware cmcc_rax3000m
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m/*') != '' && !cancelled()
@@ -468,13 +473,13 @@ jobs:
       - name: Generate release tag
         id: tag
         run: |
-          echo "release_tag=ImmortalWrt_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          echo "release_tag=ImmortalWrt_RAX3000M_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "ImmortalWrt for Xiaomi AX3000T & CMCC RAX3000M" >> release.txt
+          echo "ImmortalWrt for CMCC RAX3000M (MT7981, hanwckf openwrt-21.02)" >> release.txt
           echo "" >> release.txt
-          echo "Supported devices:" >> release.txt
-          echo "- Xiaomi Mi Router AX3000T (standard / stock / AN8855)" >> release.txt
-          echo "- CMCC RAX3000M (SPI-NAND / eMMC)" >> release.txt
+          echo "Included variants:" >> release.txt
+          echo "- CMCC RAX3000M (SPI-NAND)" >> release.txt
+          echo "- CMCC RAX3000M (eMMC，需在本分支 rax3000m.config 勾选)" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
