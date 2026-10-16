@@ -1,7 +1,8 @@
 # ============================================================
 # ImmortalWrt 固件编译工作流 — CMCC RAX3000M
-# 源码: hanwckf/immortalwrt-mt798x (openwrt-21.02)
+# 源码: immortalwrt/immortalwrt 官方仓库 v24.10.6 (MT7981 归入 mediatek/filogic 子目标)
 # 配置: rax3000m.config (只启用本机型，AX3000T 见 build-ax3000t-immortalwrt.yml)
+# 产物: cmcc_rax3000m 单个 profile 同时输出 SPI-NAND 与 eMMC 两套引导件
 # 触发方式: 手动触发 (workflow_dispatch)
 # ============================================================
 
@@ -27,18 +28,18 @@ on:
         default: false
 
 env:
-  # 源码仓库地址
-  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
-  # 源码分支 (基于 OpenWrt 21.02)
-  REPO_BRANCH: openwrt-21.02
+  # 源码仓库地址 (ImmortalWrt 官方仓库，不再使用 hanwckf 的 mt798x 分支)
+  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
+  # 源码分支 (官方 v24.10.6 标签；换版本只改这一行，feeds 由源码自带的 feeds.conf.default 锁定)
+  REPO_BRANCH: v24.10.6
   # 设备配置文件（make menuconfig 生成），工作流复制成 openwrt/.config
   # hashFiles 只接受字面量，改名须同步下面两条 cache key 里的文件名
   CONFIG_FILE: rax3000m.config
   # cache key 前缀 = 配置文件名去掉 .config，换设备时与上面成对改
   CONFIG_NAME: rax3000m
   # defconfig 自检的期望符号，换 target/设备时与上面成对改（步骤 9 末尾断言）
-  EXPECT_TARGET: CONFIG_TARGET_mediatek_mt7981
-  EXPECT_DEVICE: CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_cmcc_rax3000m
+  EXPECT_TARGET: CONFIG_TARGET_mediatek_filogic
+  EXPECT_DEVICE: CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m
   # 三个自定义脚本 = 流程里的三个插入点，执行阶段见各行注释
   # 新增插入点：这里加一行 + 工作流加一步调用 + 建对应脚本，三处一起
   # 1) ./scripts/feeds update -a 之前 —— 增删第三方 feed 源
@@ -261,47 +262,33 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 13: 整理固件文件
-    # 删除 packages 子目录和 manifest/buildinfo/校验和等附属文件，只留可刷写镜像
-    # 按型号分目录存到 release/<型号>/：型号 = profile 去掉 -stock 后缀，同一硬件的变体同目录
+    # 24.10 产物名形如 immortalwrt-<版本>-mediatek-filogic-cmcc_rax3000m-<类型>，版本号在文件名里，
+    # 且 SPI-NAND/eMMC 引导件由同一 profile 一起产出，故按扩展名收进单一目录、不再反解型号
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
       if: (!cancelled())
       run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        find . -maxdepth 1 -type f ! -name '*.bin' ! -name '*.itb' -delete
-        # 固件文件名形如 immortalwrt-<target>-<subtarget>-<profile>-<类型>.bin
-        prefix="immortalwrt-$(basename "$(dirname "$PWD")")-$(basename "$PWD")-"
-        for f in *.bin *.itb; do
+        mkdir -p release/cmcc_rax3000m
+        # *.itb = sysupgrade/recovery 镜像，*.bin/*.fip = preloader/gpt/uboot.fip 引导件
+        for f in openwrt/bin/targets/mediatek/filogic/*.bin \
+                 openwrt/bin/targets/mediatek/filogic/*.itb \
+                 openwrt/bin/targets/mediatek/filogic/*.fip; do
           [ -e "$f" ] || continue
-          base="${f#"$prefix"}"
-          prof="${base%-initramfs-kernel.bin}"
-          prof="${prof%-squashfs-sysupgrade.bin}"
-          prof="${prof%-squashfs-factory.bin}"
-          model="${prof%-stock}"
-          mkdir -p "$GITHUB_WORKSPACE/release/$model"
-          mv "$f" "$GITHUB_WORKSPACE/release/$model/"
+          cp "$f" release/cmcc_rax3000m/
         done
+        ls -l release/cmcc_rax3000m
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 14: 按型号上传散文件目录为 artifact（tar.zst 打包由 release job 执行）
-    # 型号目录不存在（rax3000m.config 未勾选该变体）时 hashFiles 为空，跳过对应上传
+    # 步骤 14: 上传散文件目录为 artifact（tar.zst 打包由 release job 执行）
     # ----------------------------------------------------------
     - name: Upload firmware cmcc_rax3000m
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m/*') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: ImmortalWrt_firmware_cmcc_rax3000m${{ env.FILE_DATE }}
         path: release/cmcc_rax3000m
-
-    - name: Upload firmware cmcc_rax3000m-emmc
-      uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/cmcc_rax3000m-emmc/*') != '' && !cancelled()
-      with:
-        name: ImmortalWrt_firmware_cmcc_rax3000m-emmc${{ env.FILE_DATE }}
-        path: release/cmcc_rax3000m-emmc
 
   # ------------------------------------------------------------
   # Release 发布 job：编译成功后打包上传 Release，并清理旧 runs / Releases
@@ -349,11 +336,12 @@ jobs:
         run: |
           echo "release_tag=ImmortalWrt_RAX3000M_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "ImmortalWrt for CMCC RAX3000M (MT7981, hanwckf openwrt-21.02)" >> release.txt
+          echo "ImmortalWrt 24.10.6 for CMCC RAX3000M (MT7981 / mediatek-filogic，官方 immortalwrt/immortalwrt 仓库)" >> release.txt
           echo "" >> release.txt
-          echo "Included variants:" >> release.txt
-          echo "- CMCC RAX3000M (SPI-NAND)" >> release.txt
-          echo "- CMCC RAX3000M (eMMC，需在本分支 rax3000m.config 勾选)" >> release.txt
+          echo "同一个 cmcc_rax3000m profile 同时产出两种存储的刷写件：" >> release.txt
+          echo "- 通用：cmcc_rax3000m-squashfs-sysupgrade.itb（UBI 根文件系统）、-initramfs-recovery.itb（recovery）" >> release.txt
+          echo "- SPI-NAND：cmcc_rax3000m-nand-preloader.bin + cmcc_rax3000m-nand-bl31-uboot.fip" >> release.txt
+          echo "- eMMC：cmcc_rax3000m-emmc-preloader.bin + cmcc_rax3000m-emmc-bl31-uboot.fip + cmcc_rax3000m-emmc-gpt.bin" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
