@@ -13,54 +13,34 @@ on:
   # 手动触发：可在 GitHub Actions 页面点击 "Run workflow" 按钮
   workflow_dispatch:
     inputs:
-      # dl 软件包源码下载缓存：默认启用，Cache downloads 步骤没有 if，恒定恢复 openwrt/dl
-      # 并在收尾保存。要绕开旧缓存不再靠"关掉开关"，而是勾下面这个清理开关。
-      # 勾选 clean_dl_cache 时，Clear dl cache 步骤排在 Cache downloads 之前，先把 Actions
-      # 缓存存储里本设备前缀 (${CONFIG_NAME}-dl-) 的条目全删掉，于是本趟恢复必然落空 →
-      # 全量重新下载 → 收尾把新 key 存回去，一趟冷编译就把缓存重新灌满。
-      # 旧的"关掉开关"要付两趟（本趟不读写、下趟还得从零重下）才恢复热度，所以取消了那条路。
-      # 什么时候要清：改了某个 package 的源码版本或地址（Makefile 里的 PKG_VERSION /
-      # PKG_SOURCE_VERSION / PKG_SOURCE_URL 等），而 dl 缓存 key 的哈希范围不含这些字段
-      # （只哈希 feeds.conf.default 和设备配置），缓存不会自动失效、里面还是旧包。
+      # dl 源码包下载缓存：默认启用，Cache downloads 步骤恒定恢复 openwrt/dl 并在收尾保存。
+      # 勾选后 Clear dl cache 先删掉 ${CONFIG_NAME}-dl- 前缀条目，本趟全量重下、收尾重灌。
       clean_dl_cache:
         description: 先清空 dl 下载缓存再编译（改了 package 的源码版本/地址、或怀疑 dl 里是旧包时勾选）
         type: boolean
         default: false
-      # ccache 编译对象缓存：同样默认启用。CONFIG_CCACHE=y 由 "Load custom config" 步骤无条件
-      # 追加进 openwrt/.config，make 命令行不带参数——rules.mk 的 `ifneq ($(CONFIG_CCACHE),)`
-      # 读的就是 .config 转成的 make 变量，两条路等价，但写在三条 make 回退行上就是三处状态、
-      # 和缓存步骤的门控各写一次必然改一漏一，所以只落在被读取的配置文件里。
-      # 勾选 clean_ccache 时先删掉 ${CONFIG_NAME}-ccache- 前缀的旧条目，本趟全部未命中、收尾重灌。
-      # 什么时候要清：怀疑复用到了不对的编译产物，或 ccache 的目录/规则换过。
-      # 没勾选（含用 API/schedule 触发、inputs 取到空值）= 不清理 + 照常命中缓存，
-      # 不会再出现"没传参数就意外冷编译"。
+      # ccache 编译对象缓存：同样默认启用，CONFIG_CCACHE=y 由 Load custom config 步骤写进 .config。
+      # 勾选后先删 ${CONFIG_NAME}-ccache- 前缀条目，本趟全部未命中、收尾重灌。
       clean_ccache:
         description: 先清空 ccache 编译对象缓存再编译（怀疑产物不对、需排除 ccache 时勾选）
         type: boolean
         default: false
 
 env:
-  # 源码仓库地址 (hanwckf 的 MT798x ImmortalWrt 分支)
+  # 源码仓库地址
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
-  # 源码分支 (openwrt-21.02 基于 OpenWrt 21.02)
+  # 源码分支 (基于 OpenWrt 21.02)
   REPO_BRANCH: openwrt-21.02
-  # 自定义固件配置文件 (OpenWrt make menuconfig 生成，按设备型号命名)
-  # 工作流把它复制成 openwrt/.config；按型号命名是为了与"编译期真正的 .config"区分开
-  # 本机型只启用 xiaomi_mi-router-ax3000t；同平台的 RAX3000M 走 build-rax3000m-immortalwrt.yml
+  # 设备配置文件（make menuconfig 生成），工作流复制成 openwrt/.config
+  # hashFiles 只接受字面量，改名须同步下面两条 cache key 里的文件名
   CONFIG_FILE: ax3000t.config
-  # 缓存 key 的可读前缀：就是上面配置文件名去掉 .config 后缀，换设备时这两行成对一起改
-  # (key 拼成 ${{ env.CONFIG_NAME }}-dl-<hash> / -ccache-<hash>)。
-  # hashFiles 的参数按 GitHub 规定只能是字面量/glob、不接受变量，所以下面两条 key 里
-  # 的配置文件名还得再同步一次。
+  # cache key 前缀 = 配置文件名去掉 .config，换设备时与上面成对改
   CONFIG_NAME: ax3000t
-  # defconfig 结果自检的期望符号：换 target 或换设备时，和上面 CONFIG_FILE/CONFIG_NAME 一起改。
-  # 这两个符号一旦在 defconfig 后消失，说明 .config 与源码树不匹配（子目标改名、profile 改名），
-  # 后果不是报错而是静默跑错 target，"Load custom config" 步骤末尾有断言拦这种情况。
+  # defconfig 自检的期望符号，换 target/设备时与上面成对改（步骤 9 末尾断言）
   EXPECT_TARGET: CONFIG_TARGET_mediatek_mt7981
   EXPECT_DEVICE: CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_xiaomi_mi-router-ax3000t
-  # 三个自定义脚本 = 编译流程里的三个插入点。文件名按"做什么"命名，
-  # "在哪个阶段执行、为什么只能在那个阶段"写在各自脚本的头注释里。
-  # 新增插入点时：这里加一行 + 工作流加一步调用 + 建对应脚本，三处一起。
+  # 三个自定义脚本 = 流程里的三个插入点，执行阶段见各行注释
+  # 新增插入点：这里加一行 + 工作流加一步调用 + 建对应脚本，三处一起
   # 1) ./scripts/feeds update -a 之前 —— 增删第三方 feed 源
   SCRIPT_ADD_FEED_SOURCES: add-feed-sources.sh
   # 2) ./scripts/feeds install -a 之后、make defconfig 之前 —— clone 非 feed 格式的第三方包
@@ -69,7 +49,7 @@ env:
   SCRIPT_SET_FIRMWARE_DEFAULTS: set-firmware-defaults.sh
   # 编译环境时区
   TZ: Asia/Shanghai
-  # 自定义 feeds 配置文件 (如存在则覆盖默认 feeds 源)
+  # 可选覆盖：本仓库根存在该文件时才 mv 覆盖源码自带 feeds，当前不存在
   FEEDS_CONF: feeds.conf.default
 
 jobs:
@@ -82,16 +62,12 @@ jobs:
 
     steps:
     # ----------------------------------------------------------
-    # 步骤 1: 释放磁盘空间
-    # 删除 Ubuntu  runner 上不常用的工具链 (Android/.NET/Haskell 等)
-    # 可释放约 6GB 空间，确保编译不会因磁盘不足而失败
+    # 步骤 1: 释放磁盘空间（删除 runner 上的 Android/.NET/Haskell 等工具链）
     # ----------------------------------------------------------
     - name: Free disk space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
-        # 保留工具缓存，避免删除编译可能需要的工具
         tool-cache: false
-        # 以下各项默认删除，可设为 false 保留
         android: true
         dotnet: true
         haskell: true
@@ -99,32 +75,18 @@ jobs:
         swap-storage: false
 
     # ----------------------------------------------------------
-    # 步骤 2: 检出本仓库代码
-    # 将设备配置 ax3000t.config、自定义脚本等文件拉取到工作区
+    # 步骤 2: 检出本仓库（设备配置文件与自定义脚本）
     # ----------------------------------------------------------
     - name: Checkout
       uses: actions/checkout@main
 
     # ----------------------------------------------------------
-    # 步骤 3: 安装编译依赖
-    # 使用 ImmortalWrt 官方脚本安装所有编译依赖 (gcc、make、flex 等)
-    # 设置时区为 Asia/Shanghai 使编译时间戳正确
+    # 步骤 3: 安装编译依赖（ImmortalWrt 官方一键脚本），设置时区并准备 /srcdir
     # ----------------------------------------------------------
     - name: Install build dependencies
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        #  以下为手动安装依赖的方式 (已替换为官方一键脚本)
-        #  sudo apt-get update
-        #  sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-        #    bzip2 ccache clang clangd cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
-        #    g++-multilib git gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev \
-        #    libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libreadline-dev \
-        #    libssl-dev libtool lld lldb lrzsq mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
-        #    python3 python3-pip python3-ply python3-docutils qemu-utils re2c rsync scons squashfs-tools subversion swig \
-        #    texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-        
-        # 使用 ImmortalWRT 官方脚本一键安装编译环境
         sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.eu.org/init_build_environment.sh)'
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
@@ -133,9 +95,7 @@ jobs:
         sudo chown $USER:$GROUPS /srcdir
 
     # ----------------------------------------------------------
-    # 步骤 4: 克隆 ImmortalWrt 源码
-    # 将源码克隆到 /srcdir 以获得更大的磁盘空间
-    # 并通过软链接关联到工作区
+    # 步骤 4: 克隆源码到 /srcdir（磁盘更大），软链接回工作区
     # ----------------------------------------------------------
     - name: Clone source code
       working-directory: /srcdir
@@ -146,61 +106,21 @@ jobs:
         ln -sf /srcdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     # ----------------------------------------------------------
-    # 步骤 5: 缓存 dl/ 与 openwrt/.ccache
-    # 缓存软件包源码和编译对象，加速重复构建。两层都默认启用（下面两条 Cache 步骤没有 if）：
-    # dl 缓存让源码包不变时不重新下载，ccache 缓存复用未修改的 C/C++ 源文件编译结果。
-    # 勾触发表的 clean_dl_cache / clean_ccache 时，对应层的 Clear ... cache 步骤先从 Actions
-    # 缓存存储里删掉本设备前缀的条目，本趟恢复落空、全量下载/重编，收尾再存回新条目。
-    # 清理必须排在同层恢复之前：actions/cache 的恢复动作会把旧 dl 直接落进工作区，
-    # 清理若排在后面，本趟用的仍是旧包、开关等于没生效；先删也保证主 key 不存在，
-    # 收尾保存不会因"key 已存在"被跳过。
-    #
-    # 缓存步骤排在 Load custom feeds 之前是必须的：那一步会把根目录的 feeds.conf.default
-    # (若存在) mv 进 openwrt/，mv 之后 hashFiles 就取不到它了。放在 mv 之前，
-    # 这个可选覆盖入口才真正参与 key 计算。
-    #
-    # key = ${{ env.CONFIG_NAME }} + -dl- / -ccache- + 配置内容哈希，前缀不再是写死的设备名。
-    # 设备名前置（而不是跟在 immortalwrt- 这类公共前缀之后）是必须的：restore-keys 按字符串
-    # 前缀匹配，`immortalwrt-dl-an7581-` 恰好是 `immortalwrt-dl-an7581-gpon-<hash>` 的前缀，
-    # 两条 key 就会互相命中对方缓存（缓存虽按分支隔离，但默认分支 master 创建的条目各分支都能恢复）。
-    # 前置后 ax3000t- / rax3000m- / an7581- / an7581-gpon- / an7583-gpon- 五组前缀互不为前缀。
-    # 拆成两台设备的工作流后这条更关键：同一分支上两条工作流共用一个缓存命名空间
-    # (缓存按 ref 隔离、不按工作流隔离)，ax3000t- 前缀是它们不互相恢复对方 dl/ 和 .ccache 的唯一分隔。
-    #
-    # 前缀之后仍要拼 hashFiles：actions/cache 只在主 key 未精确命中时才保存缓存，
-    # 纯常量 key 一旦命中就永久不再更新（改配置也不会失效），
-    # "内容哈希 key + restore-keys 前缀"才是缓存能滚动更新的唯一通道。
-    # 哈希参数取仓库根的设备配置文件，外加可选的 feeds.conf.default。后者本仓库当前没有，
-    # hashFiles 对缺失项不产生任何贡献，所以它现在不参与计算；留着是为了以后真在根目录
-    # 放入该文件时能自动让缓存失效。
-    #
-    # 同一台设备改配置只换哈希、前缀不变，同分支的旧条目由 restore-keys 兜住，不会冷启动。
-    #
-    # ccache 路径必须是 openwrt/.ccache，不能写 ~/.ccache：
-    # 源码是 hanwckf/immortalwrt-mt798x (openwrt-21.02)，其 rules.mk 里 CCACHE_DIR 默认取
-    # $(TOPDIR)/.ccache，而本分支 ax3000t.config 只有 CONFIG_DEVEL=y、未设 CONFIG_CCACHE_DIR，
-    # 所以编译实际写入的是 openwrt/.ccache。此前缓存 ~/.ccache 时两边不是同一目录，
-    # 命中率恒为 0，白付 ccache 开销。命中率看构建日志末尾的 `ccache -s`（Makefile world 目标自带）。
-    #
-    # ccache key 哈希仓库根的 ax3000t.config（原先哈希的是 openwrt/.config）：那是被 defconfig
-    # 展开后的完整结果，会随 feed 内容一起变，而 openwrt 本身还是指向 /srcdir/openwrt 的
-    # 符号链接，能不能取到没有日志可证。哈希仓库里的输入文件语义才明确。
-    # 两条 key 的哈希参数与 AN7581 那三份保持一致（feeds.conf.default + 设备配置）。
+    # 步骤 5: 缓存 dl/（源码包）与 openwrt/.ccache（编译对象），两层默认启用
+    # Clear ... cache 必须排在同层 Cache 之前，否则本趟仍用旧缓存、开关等于没生效
+    # key = CONFIG_NAME 前置 + -dl-/-ccache- + 配置内容哈希；同分支工作流共用缓存空间，前缀是唯一分隔
+    # ccache 路径须与 rules.mk 的 CCACHE_DIR 默认值 $(TOPDIR)/.ccache 一致，写 ~/.ccache 命中率恒 0
     # ----------------------------------------------------------
     - name: Clear dl cache
       if: ${{ inputs.clean_dl_cache }}
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 只在勾选清理时执行，位置必须在同层 Cache 步骤之前（理由见步骤 5 的头注释）。
-        # gh cache list 默认只返回 30 条，--limit 100 已取到 API 单页上限。
-        # gh cache delete 没有 --yes/--confirm 参数：按 id 删除不会交互询问，多写这个参数只会 unknown flag 失败。
+        # 删掉本设备前缀的全部缓存条目（--limit 100 是 API 单页上限）
         gh cache list --limit 100 --json key,id | \
           jq -r '.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-dl-")) | .id' | \
           xargs -r gh cache delete
-        # 删净断言：残留不为 0 就直接失败。同前缀条目超过单页上限、或别的 ref 还有同名前缀条目时，
-        # 继续编译等于"以为清了其实仍用旧缓存"，正是最难查的静默失效。
-        # 真撞到上限：去 仓库 Settings → Actions → Caches 手动删，或把上面的列举换成翻页拉取。
+        # 删净断言：还有残留说明条目超过单页上限或别的 ref 仍有同名前缀，本趟不算冷编译
         left=$(gh cache list --limit 100 --json key | \
           jq '[.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-dl-"))] | length')
         if [ "$left" != "0" ]; then
@@ -221,15 +141,11 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 只在勾选清理时执行，位置必须在同层 Cache 步骤之前（理由见步骤 5 的头注释）。
-        # gh cache list 默认只返回 30 条，--limit 100 已取到 API 单页上限。
-        # gh cache delete 没有 --yes/--confirm 参数：按 id 删除不会交互询问，多写这个参数只会 unknown flag 失败。
+        # 删掉本设备前缀的全部缓存条目（--limit 100 是 API 单页上限）
         gh cache list --limit 100 --json key,id | \
           jq -r '.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-ccache-")) | .id' | \
           xargs -r gh cache delete
-        # 删净断言：残留不为 0 就直接失败。同前缀条目超过单页上限、或别的 ref 还有同名前缀条目时，
-        # 继续编译等于"以为清了其实仍用旧缓存"，正是最难查的静默失效。
-        # 真撞到上限：去 仓库 Settings → Actions → Caches 手动删，或把上面的列举换成翻页拉取。
+        # 删净断言：还有残留说明条目超过单页上限或别的 ref 仍有同名前缀，本趟不算冷编译
         left=$(gh cache list --limit 100 --json key | \
           jq '[.[] | select(.key | startswith("${{ env.CONFIG_NAME }}-ccache-"))] | length')
         if [ "$left" != "0" ]; then
@@ -247,8 +163,7 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 6: 加载自定义 feeds 源
-    # 如果仓库中存在 feeds.conf.default 则覆盖源码默认值
-    # 然后执行 add-feed-sources.sh (增删第三方 feed 源)
+    # 根目录存在 feeds.conf.default 时覆盖源码默认值，然后执行 add-feed-sources.sh
     # ----------------------------------------------------------
     - name: Load custom feeds
       run: |
@@ -258,24 +173,19 @@ jobs:
         $GITHUB_WORKSPACE/$SCRIPT_ADD_FEED_SOURCES
 
     # ----------------------------------------------------------
-    # 步骤 7: 更新 feeds
-    # 从各 feed 源拉取最新的软件包定义
+    # 步骤 7: 更新 feeds，拉取各源的软件包定义
     # ----------------------------------------------------------
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
     # ----------------------------------------------------------
-    # 步骤 8: 安装 feeds
-    # 将更新后的 feed 软件包安装到编译环境中
+    # 步骤 8: 安装 feeds 到编译环境
     # ----------------------------------------------------------
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
     # ----------------------------------------------------------
-    # 步骤 8.5: 克隆第三方包 (非 feed 格式)
-    # 动作在 clone-packages.sh 里。"必须在 feeds install 之后"这条硬约束的来由写在该脚本
-    # 头注释里 (AN7581 分支上 airoha-npu 曾被 make defconfig 静默跳过，见 77684b6)，
-    # 挪步骤前先读它。
+    # 步骤 8.5: 执行 clone-packages.sh 克隆非 feed 格式的第三方包（须在 feeds install 之后，理由见脚本头注释）
     # ----------------------------------------------------------
     - name: Clone custom packages
       run: |
@@ -284,49 +194,34 @@ jobs:
         $GITHUB_WORKSPACE/$SCRIPT_CLONE_PACKAGES
 
     # ----------------------------------------------------------
-    # 步骤 9: 加载自定义配置
-    # 将设备配置复制为 openwrt/.config 作为编译配置（用 cp 不用 mv：留着仓库根那份
-    # 在工作区里，后面若还要排查 key 或复跑步骤都还能看到原始输入）
-    # CONFIG_CCACHE=y 在这里无条件追加（make 命令行不带参数）；缓存清理是另一回事，看触发表的 clean_ccache
-    # 如果存在 files/ 目录则复制到 openwrt/files/ 作为固件内预置文件
-    # make defconfig 根据 .config 生成完整配置
-    # 最后执行 set-firmware-defaults.sh (修改默认 IP、DHCP 范围等)
+    # 步骤 9: 设备配置复制成 openwrt/.config 并追加 CONFIG_CCACHE=y，make defconfig 生成完整配置
+    # files/ 存在则作为固件预置文件；最后执行 set-firmware-defaults.sh
     # ----------------------------------------------------------
     - name: Load custom config
       run: |
         [ -e files ] && mv files openwrt/files
-        # 配置文件必须存在，缺了就报错退出。不要写成 [ -e $CONFIG_FILE ] && cp ... ：
-        # Actions 默认 shell 是 bash -e，而 && 列表里失败的那个不是最后一个命令，
-        # set -e 不会终止步骤（已实测：文件不存在时后续命令照跑）。
-        # 后果是静默用源码仓库的默认配置编译到底，产出不含本项目软件包的固件还显示成功。
+        # 缺配置文件必须显式失败：写成 [ -e x ] && cp 时 set -e 不会终止步骤，
+        # 会静默用源码默认配置编到底，产出没有本项目软件包的固件还显示成功。
         if [ ! -e "$CONFIG_FILE" ]; then
           echo "::error::缺少编译配置文件 $CONFIG_FILE（应位于本仓库根目录，检查工作流 CONFIG_FILE 与分支上的文件名是否一致）"
           exit 1
         fi
         cp "$CONFIG_FILE" openwrt/.config
-        # ccache 现在是常开，开关值落在 .config 里：rules.mk 的 ifneq ($(CONFIG_CCACHE),) 读的就是这个变量，
-        # 与从前在 make 行传 CONFIG_CCACHE=y 等价。21.02 的 config CCACHE 同样是
-        # `bool "Use ccache" if DEVEL`，而 ax3000t.config 第 53 行已有 CONFIG_DEVEL=y，
-        # 符号可见，所以下面的 make defconfig 不会丢掉它（本步骤末尾有 grep 兜底自检）。
-        # 用 printf 且前置 \n：万一配置文件末行漏了换行符，直接追加会和最后一行粘成
-        # CONFIG_PACKAGE_dnsmasq=nCONFIG_CCACHE=y 这样的无效行，被 kconfig 静默忽略、ccache 等于没开。
-        # (当前 ax3000t.config 末行带换行符，前置 \n 只是多出一个空行，防的是手工改配置时丢掉末行换行)
+        # CONFIG_CCACHE=y 只写进 .config（rules.mk 读的就是它，与命令行传参等价，少一处会改漏的状态）；
+        # 前置 \n 防止配置末行缺换行符时粘成一条无效行、被 kconfig 静默忽略。
         printf '\n%s\n' 'CONFIG_CCACHE=y' >> openwrt/.config
         chmod +x $SCRIPT_SET_FIRMWARE_DEFAULTS
         cd openwrt
         make defconfig
-        # 兜底自检 1：target 与设备符号必须还在 defconfig 结果里。
-        # .config 和源码树不匹配时（换仓库、子目标或 profile 改名，例如主线 24.10 把 MT7981
-        # 归到 mediatek/filogic）defconfig 不报错，而是回落到默认 target 一路编到底，
-        # 产物整理取不到本设备目录、上传步骤全跳过，release job 照样建出一个空 Release。
+        # 自检 1：target/设备符号必须还在 defconfig 结果里。配置与源码树不匹配时（换仓库或
+        # profile 改名）defconfig 不报错，而是回落默认 target 编到底，最后产出一个空 Release。
         for sym in "$EXPECT_TARGET" "$EXPECT_DEVICE"; do
           grep -q "^${sym}=" .config || {
             echo "::error::defconfig 结果里没有 $sym，$CONFIG_FILE 与源码 $REPO_URL ($REPO_BRANCH) 不匹配"
             exit 1
           }
         done
-        # 兜底自检 2：CONFIG_CCACHE=y 被 defconfig 丢掉就直接失败，
-        # 而不是白编一趟才发现命中率是 0
+        # 自检 2：开关被 defconfig 丢掉就立刻失败，别白编一趟
         grep -q '^CONFIG_CCACHE=y' .config || {
           echo "::error::CONFIG_CCACHE=y 没能进入 defconfig 结果，检查 $CONFIG_FILE 里是否有 CONFIG_DEVEL=y"
           exit 1
@@ -334,43 +229,31 @@ jobs:
         $GITHUB_WORKSPACE/$SCRIPT_SET_FIRMWARE_DEFAULTS
 
     # ----------------------------------------------------------
-    # 步骤 10: 下载编译所需的软件包源码
-    # make download 预下载所有源码包，避免编译时网络超时
-    # 清理小于 1024 字节的下载失败文件
-    # (make defconfig 与 ccache 开关自检已上移到步骤 9)
+    # 步骤 10: 预下载源码包，避免编译期网络超时
+    # 不按大小清理 dl/：go-mod-cache 里上千个 <1KB 的正常文件会被误删（run 104976085590），怀疑坏包就勾 clean_dl_cache
     # ----------------------------------------------------------
     - name: Download package
       id: package
       run: |
         cd openwrt
         make download -j8 V=11
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
 
     # ----------------------------------------------------------
     # 步骤 11: 编译固件
-    # 失败先同级并发重试，最后才降级单线程：tools/quilt 这类"首趟必失败、重跑即过"的状态
-    # 依赖型失败，第二趟全并发只重做失败的那个 target（已编译项有 stamp 直接跳过），成本分钟级；
-    # 第二条若写成 -j1，等于把剩余所有包都改成串行，多花几十分钟到一小时。
-    # 只有前两条都失败才降级 -j1 V=s：那种才是 OpenWrt 依赖图漏声明导致的并发竞态，
-    # 需要串行才可能过，V=s 同时留下可排查的详细输出。
-    # 编译产物只有 AX3000T：配置里启用了哪几个变体 (standard / stock / AN8855) 就出哪几个
+    # 失败先同级并发重试一次，仍失败才降级 -j1 V=s（-j1 会把剩余所有包串行）；ccache 开关见步骤 9
     # ----------------------------------------------------------
     - name: Compile the firmware
       id: compile
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        # 同级重试 → 单线程兜底; 全部失败时必须让步骤报错, 否则后续无产物却显示成功
-        # 命令行不再传 CONFIG_CCACHE=y：开关已由步骤 9 按触发表单写进 .config，
-        # 回退的三条 make 都读同一份 .config，不必各带一遍参数
         make -j$(nproc) || make -j$(nproc) || make -j1 V=s || exit 1
         echo "status=success" >> $GITHUB_OUTPUT
 
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
     # ----------------------------------------------------------
-    # 步骤 12: 检查磁盘使用情况 (无论成功失败都执行)
+    # 步骤 12: 检查磁盘使用情况
     # ----------------------------------------------------------
     - name: Check space usage
       if: (!cancelled())
@@ -378,10 +261,8 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 13: 整理固件文件
-    # 删除 targets 目录下的 packages 子目录 (减小发布体积)
-    # 删除 manifest/buildinfo/校验和等非固件附属文件
-    # 按硬件型号将固件分目录存放到 release/<型号>/
-    # 型号 = profile 去掉 -stock 后缀, 同一硬件的 standard 与 stock 镜像同目录
+    # 删除 packages 子目录和 manifest/buildinfo/校验和等附属文件，只留可刷写镜像
+    # 按型号分目录存到 release/<型号>/：型号 = profile 去掉 -stock 后缀，同一硬件的变体同目录
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
@@ -405,11 +286,8 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
-    # 步骤 14: 按硬件型号上传固件散文件目录为 artifact
-    # 每个型号一个独立 artifact, 下载后直接是各固件 bin, 便于单独取用
-    # 与 Release 附件 (tar.zst 整包) 形态不同: artifact 供挑文件, Release 供整包下载
-    # tar.zst 打包移至下方 release job 下载 artifact 后统一执行
-    # 型号目录不存在时 (ax3000t.config 未勾选该变体) 跳过对应上传
+    # 步骤 14: 按型号上传散文件目录为 artifact（tar.zst 打包由 release job 执行）
+    # 型号目录不存在（ax3000t.config 未勾选该变体）时 hashFiles 为空，跳过对应上传
     # ----------------------------------------------------------
     - name: Upload firmware xiaomi_mi-router-ax3000t
       uses: actions/upload-artifact@main
@@ -426,8 +304,7 @@ jobs:
         path: release/xiaomi_mi-router-ax3000t-an8855
 
   # ------------------------------------------------------------
-  # Release 发布 job
-  # 编译完成后统一创建 Release, 与 U-Boot 工作流结构保持一致
+  # Release 发布 job：编译成功后打包上传 Release，并清理旧 runs / Releases
   # ------------------------------------------------------------
   release:
     name: Create Release
@@ -442,8 +319,7 @@ jobs:
     steps:
 
       # ----------------------------------------------------------
-      # 步骤 1: 下载本次 run 的全部 artifact
-      # 不指定 name 时下载所有 artifact, 每个解压到以其名称命名的子目录
+      # 步骤 1: 下载本次 run 的全部 artifact（每个解压到同名子目录）
       # ----------------------------------------------------------
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -451,8 +327,7 @@ jobs:
           path: artifacts
 
       # ----------------------------------------------------------
-      # 步骤 2: 将各型号散文件目录打包为 tar.zst 汇总到 release 目录
-      # artifact 名格式 ImmortalWrt_firmware_<型号>_<日期>, 从中反解型号名
+      # 步骤 2: 把各型号散文件目录打包成 <型号>.tar.zst（型号名从 artifact 名反解）
       # ----------------------------------------------------------
       - name: Package firmware by device
         run: |
@@ -467,8 +342,7 @@ jobs:
           ls -l release/
 
       # ----------------------------------------------------------
-      # 步骤 3: 生成 Release 标签和说明
-      # 标签格式: ImmortalWrt_年.月.日-时分
+      # 步骤 3: 生成 Release 标签 ImmortalWrt_<型号>_年.月.日-时分 与说明
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
@@ -483,7 +357,7 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 步骤 4: 上传全部固件压缩包到 GitHub Release
+      # 步骤 4: 上传固件压缩包到 GitHub Release
       # ----------------------------------------------------------
       - name: Upload firmware to release
         id: release
@@ -497,8 +371,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ----------------------------------------------------------
-      # 步骤 5: 清理旧的 workflow runs
-      # 保留最近 7 天的运行记录，至少保留 3 条
+      # 步骤 5: 清理旧 workflow runs（保留 7 天，至少 3 条）
       # ----------------------------------------------------------
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
@@ -509,8 +382,7 @@ jobs:
           keep_minimum_runs: 3
 
       # ----------------------------------------------------------
-      # 步骤 6: 清理旧的 GitHub Releases
-      # 保留最近 3 个 Release，删除旧的 Release 及其 tag
+      # 步骤 6: 清理旧 Release（保留最近 3 个，连 tag 一起删）
       # ----------------------------------------------------------
       - name: Remove old Releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
