@@ -11,7 +11,7 @@
 |---|---|---|
 | `master` | 总览分支，存放所有工作流模板（不存放设备配置） | — |
 | `AN7581` | AN758x 平台三个编译目标（XGS-PON 与 GPON）合并在同一分支 | `an7581.config`、`an7581-gpon.config`、`an7583-gpon.config` |
-| `MT7981-hanwckf` | MT7981 平台固件 + U-Boot | `mt7981.config` |
+| `MT7981` | MT7981 平台两台设备的固件 + U-Boot | `ax3000t.config`、`rax3000m.config` |
 
 > 2026-10-15 起原 `AN7581-GPON` / `AN7583-GPON` 两个分支并入 `AN7581`：三份设备配置和三份工作流
 > 全部保留、不合并（各工作流只读自己那份配置，cache key 的 `hashFiles` 参数是字面量，并一会让
@@ -21,14 +21,15 @@
 
 | 工作流 | 所在分支 | 说明 | 触发方式 |
 |---|---|---|---|
-| `build-mt7981-immortalwrt.yml` | MT7981-hanwckf / master | 编译 MT7981 平台路由器 ImmortalWrt 固件 | 手动触发 (`workflow_dispatch`) |
-| `build-mt7981-u-boot.yml` | MT7981-hanwckf / master | 并行编译 MT7981 平台所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
+| `build-ax3000t-immortalwrt.yml` | MT7981 / master | 编译小米 AX3000T 固件（standard / stock / AN8855 变体按配置勾选） | 手动触发 (`workflow_dispatch`) |
+| `build-rax3000m-immortalwrt.yml` | MT7981 / master | 编译 CMCC RAX3000M 固件（SPI-NAND / eMMC 同上） | 手动触发 (`workflow_dispatch`) |
+| `build-mt7981-u-boot.yml` | MT7981 / master | 并行编译 MT7981 平台所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
 | `build-an7581-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫固件 (XGS-PON)，源码分支 `REPO_BRANCH=master` | 手动触发 (`workflow_dispatch`) |
 | `build-an7581-gpon-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫固件 (GPON)，源码分支 `REPO_BRANCH=AN7581-GPON` | 手动触发 (`workflow_dispatch`) |
 | `build-an7583-gpon-immortalwrt.yml` | AN7581 / master | 编译 AN7583 平台光猫固件 (GPON)，源码分支 `REPO_BRANCH=AN7583-GPON` | 手动触发 (`workflow_dispatch`) |
 
 > `REPO_BRANCH` 写死在各工作流的 `env` 段（指向 PonWrt 源码仓库的分支），不由本仓库分支名推导；
-> 这三份副本留在 master 是因为非默认分支的工作流必须先在默认分支存在才能手动运行。
+> 这些副本留在 master 是因为非默认分支的工作流必须先在默认分支存在才能手动运行。
 
 ## MT7981 平台默认配置
 
@@ -127,9 +128,9 @@
 
 | 文件 | 用途 |
 |---|---|
-| `an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`（均在 `AN7581` 分支根目录）、`mt7981.config`（在 `MT7981-hanwckf` 分支根目录） | 按设备型号命名的 OpenWrt menuconfig 配置，master 不存放配置文件 — 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并无条件追加 `CONFIG_CCACHE=y`（`dl/` 与 `.ccache` 两层缓存默认启用；四份固件编译工作流各带 `clean_dl_cache` / `clean_ccache` 两个清理开关，默认不勾）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`，`an7581-` / `an7581-gpon-` / `an7583-gpon-` / `mt7981-` 四组前缀互不为前缀，同一分支上的多份工作流才不会恢复到彼此的缓存；改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里 `hashFiles` 的字面文件名（该参数不接受变量）；勾选清理开关时对应的 `Clear ... cache` 步骤排在同层 `Cache ...` 之前，删掉本设备前缀的条目后本趟全量下载/重编、收尾重存（一趟即恢复热度），并有删净断言，没删净直接失败 |
+| `an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`（均在 `AN7581` 分支根目录）、`ax3000t.config` / `rax3000m.config`（在 `MT7981` 分支根目录） | 按设备型号命名的 OpenWrt menuconfig 配置，master 不存放配置文件 — 定义目标设备、内核选项、软件包；工作流复制成 `openwrt/.config` 并无条件追加 `CONFIG_CCACHE=y`（`dl/` 与 `.ccache` 两层缓存默认启用；五份固件编译工作流各带 `clean_dl_cache` / `clean_ccache` 两个清理开关，默认不勾）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`，`an7581-` / `an7581-gpon-` / `an7583-gpon-` / `ax3000t-` / `rax3000m-` 五组前缀互不为前缀，同一分支上的多份工作流才不会恢复到彼此的缓存；改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里 `hashFiles` 的字面文件名（该参数不接受变量）；勾选清理开关时对应的 `Clear ... cache` 步骤排在同层 `Cache ...` 之前，删掉本设备前缀的条目后本趟全量下载/重编、收尾重存（一趟即恢复热度），并有删净断言，没删净直接失败 |
 | `add-feed-sources.sh` | feeds 更新**前**执行的钩子脚本 — 增删第三方软件源（改 `feeds.conf.default`）。feed 名只能用字母、数字、下划线，带连字符会让 `feeds update` 报语法错误 |
-| `clone-packages.sh` | feeds 安装**后**、`make defconfig` **前**执行的钩子脚本 — clone 非 feed 格式的第三方包到 `package/<包名>/`。位置是硬约束：提前 clone 时 `+luci-base` 这类 feed 依赖解析不了，`make defconfig` 会静默跳过整包（编译不报错，见提交 `77684b6`）。AN7581 分支预置 `luci-app-lucky` + `luci-app-airoha-npu`，MT7981-hanwckf 分支只有 `luci-app-lucky` |
+| `clone-packages.sh` | feeds 安装**后**、`make defconfig` **前**执行的钩子脚本 — clone 非 feed 格式的第三方包到 `package/<包名>/`。位置是硬约束：提前 clone 时 `+luci-base` 这类 feed 依赖解析不了，`make defconfig` 会静默跳过整包（编译不报错，见提交 `77684b6`）。AN7581 分支预置 `luci-app-lucky` + `luci-app-airoha-npu`，MT7981 分支只有 `luci-app-lucky` |
 | `set-firmware-defaults.sh` | `make defconfig` **后**、编译**前**执行的钩子脚本 — 用 `sed` 改源码树里会被装进 rootfs 的文件，即固件的出厂默认值（恢复出厂和 `sysupgrade -n` 后仍是这里的值）。AN758x 三个编译目标共用一份，改动对三份产出同时生效；MT7981 分支把默认 LAN IP 改成 `10.0.0.1`，AN7581 分支该行保持注释 |
 | `feeds.conf.default` | （可选）覆盖默认 feeds 软件源 |
 | `files/` | （可选）预置文件目录，将文件覆盖到固件根文件系统 |
