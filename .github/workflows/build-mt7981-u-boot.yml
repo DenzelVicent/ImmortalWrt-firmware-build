@@ -159,12 +159,15 @@ jobs:
           ls -l release/
 
       # ----------------------------------------------------------
-      # 步骤 3: 生成 Release 标签 U-Boot_<年-月-日-时-分> 与说明
+      # 步骤 3: 时间戳从 artifact 名回取，生成 Release 标签 U-Boot_<时间戳> 与说明
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
         run: |
-          echo "release_tag=U-Boot_$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_OUTPUT
+          first="$(ls -1 artifacts | head -1)"
+          [[ "$first" =~ ^u-boot_.+_([0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2})$ ]] || { echo "::error::artifact 名不符合命名约定: $first"; exit 1; }
+          ts="${BASH_REMATCH[1]}"
+          echo "release_tag=U-Boot_${ts}" >> $GITHUB_OUTPUT
           touch release.txt
           echo "U-Boot for Xiaomi AX3000T & CMCC RAX3000M" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
@@ -195,13 +198,14 @@ jobs:
           keep_minimum_runs: 3
 
       # ----------------------------------------------------------
-      # 步骤 6: 清理旧 Release（保留最近 3 个，连 tag 一起删）
+      # 步骤 6: 清理旧 Release（本组标签保留最近 3 个，连 tag 一起删）
       # ----------------------------------------------------------
       - name: Remove old Releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: steps.release.outputs.status == 'success' && !cancelled()
+        if: steps.release.outcome == 'success' && !cancelled()
         with:
           keep_latest: 3
           delete_tags: true
+          delete_tag_pattern: ^U-Boot_
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
