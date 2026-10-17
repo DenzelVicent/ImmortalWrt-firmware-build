@@ -42,7 +42,7 @@ env:
   # cache key 前缀 = 配置文件名去掉 .config，换设备时与上面成对改
   CONFIG_NAME: an7583-gpon
   # 目标设备和子目标（编译产物路径使用）
-  DEVICE_NAME: nokia-xg-040g-mf
+  DEVICE_NAME: XG-040G-MF
   SUBTARGET: an7583
   # 三个自定义脚本 = 流程里的三个插入点，执行阶段见各行注释
   # 1) ./scripts/feeds update -a 之前 —— 增删第三方 feed 源
@@ -353,16 +353,17 @@ jobs:
           ls -l release/
 
       # ----------------------------------------------------------
-      # 步骤 3: 从 artifact 名回取版本号，生成 Release 标签 ImmortalWrt_<版本>_<年-月-日-时-分> 与说明
+      # 步骤 3: 版本号与时间戳从 artifact 名回取，Release 标签与 artifact 名一致
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
         run: |
           # build job 的 env 不跨 job，版本号从本次 run 的 artifact 名回取（约定 ImmortalWrt_<版本>_<型号>_<日期-时分>）
           first="$(ls -1 artifacts | head -1)"
-          [[ "$first" =~ ^ImmortalWrt_([0-9A-Za-z.-]+)_.+_[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]] || { echo "::error::artifact 名不符合命名约定: $first"; exit 1; }
+          [[ "$first" =~ ^ImmortalWrt_([0-9A-Za-z.-]+)_(.+)_([0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2})$ ]] || { echo "::error::artifact 名不符合命名约定: $first"; exit 1; }
           fw="${BASH_REMATCH[1]}"
-          echo "release_tag=ImmortalWrt_${fw}_$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_OUTPUT
+          ts="${BASH_REMATCH[3]}"
+          echo "release_tag=ImmortalWrt_${fw}_${DEVICE_NAME}_${ts}" >> $GITHUB_OUTPUT
           touch release.txt
           echo "ImmortalWrt ${fw} for Nokia XG-040G-MF (Airoha AN7583)" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
@@ -393,13 +394,14 @@ jobs:
           keep_minimum_runs: 3
 
       # ----------------------------------------------------------
-      # 步骤 6: 清理旧 Release（保留最近 3 个，连 tag 一起删）
+      # 步骤 6: 清理旧 Release（本设备标签保留最近 3 个，连 tag 一起删）
       # ----------------------------------------------------------
       - name: Remove old Releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: steps.release.outputs.status == 'success' && !cancelled()
+        if: steps.release.outcome == 'success' && !cancelled()
         with:
           keep_latest: 3
           delete_tags: true
+          delete_tag_pattern: _XG-040G-MF_
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
