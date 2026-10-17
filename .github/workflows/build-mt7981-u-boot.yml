@@ -13,6 +13,12 @@ on:
   #   - cron: "0 2 15 * *"
   # 手动触发：可在 GitHub Actions 页面点击 "Run workflow" 按钮
   workflow_dispatch:
+    inputs:
+      # Release 发布开关：默认关闭，只上传 artifact，不创建 GitHub Release、不清理旧 runs/Releases。
+      release:
+        description: 编译成功后创建 GitHub Release（默认关闭，关闭时只保留 artifact）
+        type: boolean
+        default: false
 
 env:
   # 源码仓库地址 (hanwckf 的 MT798x bootloader)
@@ -115,12 +121,13 @@ jobs:
 
   # ------------------------------------------------------------
   # Release 发布 job：全部 board 编译成功后统一建 Release（matrix 各 job 各自建会同 tag 重复）
+  # 由 workflow_dispatch 的 release 开关控制，默认关闭；关闭时只保留 artifact
   # ------------------------------------------------------------
   release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: build
-    if: needs.build.result == 'success' && !cancelled()
+    if: needs.build.result == 'success' && !cancelled() && inputs.release
 
     permissions:
       contents: write   # 允许创建 Release
