@@ -9,7 +9,7 @@
 靠缓存 key 的 `CONFIG_NAME` 前缀分隔）：
 
 - **小米 AX3000T**（标准版 / stock 版 / AN8855 交换芯片版）
-- **CMCC RAX3000M**（SPI-NAND / eMMC，官方 24.10 由同一个 profile 一次产出两套引导件）
+- **CMCC RAX3000M**（SPI-NAND，官方 24.10 的同一个 profile 也会产出 eMMC 引导件，收集时排除，Release 只放 SPI-NAND 四件套）
 
 ## 编译工作流
 
@@ -59,7 +59,7 @@ OpenClash 的 `luci-compat`/`dnsmasq-full`/`bash`/`curl`/`ruby`/`kmod-nft-tproxy
 | 设备 | 配置标识符 | 变体 | 固件工作流 |
 |---|---|---|---|
 | 小米 AX3000T | `xiaomi_mi-router-ax3000t` | 标准版、`-stock`、`-an8855`、`-an8855-stock` | `build-ax3000t-immortalwrt.yml` |
-| CMCC RAX3000M | `cmcc_rax3000m` | 官方 24.10 只有这一个 profile，`-nand-preloader.bin`/`-nand-bl31-uboot.fip` 与 `-emmc-preloader.bin`/`-emmc-bl31-uboot.fip`/`-emmc-gpt.bin` 同批产出 | `build-rax3000m-immortalwrt.yml` |
+| CMCC RAX3000M | `cmcc_rax3000m` | 官方 24.10 只有这一个 profile，`-emmc-preloader.bin`/`-emmc-bl31-uboot.fip`/`-emmc-gpt.bin` 虽与 SPI-NAND 引导件同批产出，但本机型用不到，收集步骤按 `*emmc*` 排除，Release 只放 sysupgrade/recovery 两个 itb 加 `-nand-preloader.bin`/`-nand-bl31-uboot.fip` | `build-rax3000m-immortalwrt.yml` |
 
 ### U-Boot
 
@@ -78,7 +78,7 @@ OpenClash 的 `luci-compat`/`dnsmasq-full`/`bash`/`curl`/`ruby`/`kmod-nft-tproxy
 
 | 文件 | 用途 |
 |---|---|
-| `ax3000t.config`、`rax3000m.config` | OpenWrt menuconfig 配置 — 一份对应一条固件工作流，各自只启用本机型设备（`ax3000t.config` 里同一机型的其它变体行注释保留，勾选哪些就出哪些镜像）。`ax3000t.config` 面向 hanwckf 21.02 的 `mediatek/mt7981`，`rax3000m.config` 面向官方 v24.10.6 的 `mediatek/filogic`，两份配置的 target 符号与软件包段互不通用。工作流把选中的那份复制成 `openwrt/.config`，并无条件追加 `CONFIG_CCACHE=y`（`dl/` 与 `openwrt/.ccache` 两层缓存默认启用，触发表只留清理开关）。`Cache ...` 的 key 前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备要同步 `CONFIG_FILE`、`CONFIG_NAME`、key 里的哈希文件名、`EXPECT_TARGET`/`EXPECT_DEVICE` 四处。`Load custom config` 步骤末尾有两道断言：defconfig 结果里必须仍有 `EXPECT_TARGET`/`EXPECT_DEVICE`（拦配置文件与源码树不匹配导致的静默跑错 target），以及 `CONFIG_CCACHE=y` 仍在。勾选 `clean_dl_cache` / `clean_ccache` 时，对应的 `Clear ... cache` 步骤排在同层 `Cache ...` 步骤之前，先从 Actions 缓存存储删掉本设备前缀的条目，本趟恢复落空、全量下载/重编并收尾重存，一趟冷编译即恢复热度；删除后还有残留断言，没删净直接失败 |
+| `ax3000t.config`、`rax3000m.config` | OpenWrt menuconfig 配置 — 一份对应一条固件工作流，各自只启用本机型设备（`ax3000t.config` 里同一机型的其它变体行注释保留，勾选哪些就出哪些镜像）。`ax3000t.config` 面向 hanwckf 21.02 的 `mediatek/mt7981`，`rax3000m.config` 面向官方 v24.10.6 的 `mediatek/filogic`，两份配置的 target 符号与软件包段互不通用。工作流把选中的那份复制成 `openwrt/.config`，并无条件追加 `CONFIG_CCACHE=y`（`dl/` 与 `openwrt/.ccache` 两层缓存默认启用，触发表只留清理开关）。`Cache ...` 的 key 前缀取自工作流 env 的 `CONFIG_NAME`（与 `CONFIG_FILE` 成对定义），改设备要同步 `CONFIG_FILE`、`CONFIG_NAME`、key 里的哈希文件名、`EXPECT_TARGET`/`EXPECT_DEVICE` 四处。`Load custom config` 步骤末尾有两道断言：defconfig 结果里必须仍有 `EXPECT_TARGET`/`EXPECT_DEVICE`（拦配置文件与源码树不匹配导致的静默跑错 target），以及 `CONFIG_CCACHE=y` 仍在。`rax3000m.config` 另显式关闭 7 个 `trusted-firmware-a-mt79xx-ram-*`：上游 `include/trusted-firmware-a.mk` 对它们写了 `DEFAULT:=TARGET_mediatek_filogic`，勾了 filogic 就默认全选，各自只往 BIN_DIR 丢一个 UART 救砖 `mt79xx-ram-*-bl2.bin`，关掉可省 7 次 arm-trusted-firmware 交叉编译（真正刷机用的 `*-spim-nand-ddr4` 等隐藏变体不能关，镜像构建要用它们的 staging 产物）。勾选 `clean_dl_cache` / `clean_ccache` 时，对应的 `Clear ... cache` 步骤排在同层 `Cache ...` 步骤之前，先从 Actions 缓存存储删掉本设备前缀的条目，本趟恢复落空、全量下载/重编并收尾重存，一趟冷编译即恢复热度；删除后还有残留断言，没删净直接失败 |
 | `add-feed-sources.sh` | feeds 更新**前**执行的钩子脚本 — 增删第三方软件源（改 `feeds.conf.default`）。feed 名只能用字母、数字、下划线，带连字符会让 `feeds update` 报语法错误 |
 | `clone-packages.sh` | feeds 安装**后**、`make defconfig` **前**执行的钩子脚本 — clone 非 feed 格式的第三方包到 `package/<包名>/`。位置是硬约束：这些包的依赖写着 `+luci-base` 这类 feed 包，提前 clone 会让 `make defconfig` 静默跳过整包（固件里没有对应界面，但编译不报错，见提交 `77684b6`）。当前预置 `luci-app-lucky` |
 | `set-firmware-defaults.sh` | `make defconfig` **后**、编译**前**执行的钩子脚本 — 用 `sed` 改源码树里会被装进 rootfs 的文件，即固件的出厂默认值（恢复出厂和 `sysupgrade -n` 后仍是这里的值）。当前把默认 LAN IP 改为 `10.0.0.1`；DHCP 地址池出厂值为 `start=100` / `limit=150`（即 `.100`–`.249`），一般不必显式配置 |
@@ -90,7 +90,7 @@ OpenClash 的 `luci-compat`/`dnsmasq-full`/`bash`/`curl`/`ruby`/`kmod-nft-tproxy
 - AX3000T（hanwckf 分支）：[hanwckf ImmortalWrt MT798x 编译说明](https://cmi.hanwckf.top/p/immortalwrt-mt798x/)
 - RAX3000M（官方仓库）：源码为 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 的 `v24.10.6` 标签，
   设备定义在 `target/linux/mediatek/image/filogic.mk`（`Device/cmcc_rax3000m_common` 起）；
-  U-Boot 与 preloader/fip 由源码 `package/boot/uboot-mediatek` 一起构建，产物已在固件目录里
+  U-Boot 与 preloader/fip 由源码 `package/boot/uboot-mediatek` 一起构建，产物已在固件目录里；固件工作流的整理步骤按 `*cmcc_rax3000m-*` 收本 profile 的文件并排除 `*emmc*`，最终 4 件，数量不符直接失败
 
 ## 许可证
 

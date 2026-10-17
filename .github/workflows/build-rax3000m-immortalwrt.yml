@@ -262,21 +262,21 @@ jobs:
 
     # ----------------------------------------------------------
     # 步骤 13: 整理固件文件
-    # 24.10 产物名形如 immortalwrt-<版本>-mediatek-filogic-cmcc_rax3000m-<类型>，版本号在文件名里，
-    # 且 SPI-NAND/eMMC 引导件由同一 profile 一起产出，故按扩展名收进单一目录、不再反解型号
+    # 产物名是 <发行版>-[<版本>-]mediatek-filogic-cmcc_rax3000m-<类型>，版本号是否出现取决于 CONFIG_VERSION_FILENAMES，
+    # 故只按 *cmcc_rax3000m-* 匹配本 profile；同一 profile 还产出 eMMC 三件套，本机型 SPI-NAND 用不上，一并用 *emmc* 排除
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
       if: (!cancelled())
       run: |
         mkdir -p release/cmcc_rax3000m
-        # *.itb = sysupgrade/recovery 镜像，*.bin/*.fip = preloader/gpt/uboot.fip 引导件
-        for f in openwrt/bin/targets/mediatek/filogic/*.bin \
-                 openwrt/bin/targets/mediatek/filogic/*.itb \
-                 openwrt/bin/targets/mediatek/filogic/*.fip; do
-          [ -e "$f" ] || continue
-          cp "$f" release/cmcc_rax3000m/
-        done
+        find openwrt/bin/targets/mediatek/filogic -maxdepth 1 -type f \
+          -name '*cmcc_rax3000m-*' ! -name '*emmc*' \
+          \( -name '*.bin' -o -name '*.itb' -o -name '*.fip' \) \
+          -exec cp -t release/cmcc_rax3000m/ {} +
+        # 期望 4 件：squashfs-sysupgrade.itb、initramfs-recovery.itb、nand-preloader.bin、nand-bl31-uboot.fip
+        count="$(ls -1 release/cmcc_rax3000m | wc -l)"
+        [ "$count" -eq 4 ] || { echo "::error::固件文件数 $count，期望 4 件"; ls -l release/cmcc_rax3000m; exit 1; }
         ls -l release/cmcc_rax3000m
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -338,10 +338,10 @@ jobs:
           touch release.txt
           echo "ImmortalWrt 24.10.6 for CMCC RAX3000M (MT7981 / mediatek-filogic，官方 immortalwrt/immortalwrt 仓库)" >> release.txt
           echo "" >> release.txt
-          echo "同一个 cmcc_rax3000m profile 同时产出两种存储的刷写件：" >> release.txt
-          echo "- 通用：cmcc_rax3000m-squashfs-sysupgrade.itb（UBI 根文件系统）、-initramfs-recovery.itb（recovery）" >> release.txt
-          echo "- SPI-NAND：cmcc_rax3000m-nand-preloader.bin + cmcc_rax3000m-nand-bl31-uboot.fip" >> release.txt
-          echo "- eMMC：cmcc_rax3000m-emmc-preloader.bin + cmcc_rax3000m-emmc-bl31-uboot.fip + cmcc_rax3000m-emmc-gpt.bin" >> release.txt
+          echo "本机型是 SPI-NAND，Release 只放 4 件（同 profile 的 eMMC 三件套已在收集步骤排除）：" >> release.txt
+          echo "- cmcc_rax3000m-squashfs-sysupgrade.itb（sysupgrade，UBI 根文件系统）" >> release.txt
+          echo "- cmcc_rax3000m-initramfs-recovery.itb（recovery，救砖/首刷用）" >> release.txt
+          echo "- cmcc_rax3000m-nand-preloader.bin + cmcc_rax3000m-nand-bl31-uboot.fip（SPI-NAND 引导件，首刷需要）" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
