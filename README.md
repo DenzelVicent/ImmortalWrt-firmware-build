@@ -24,7 +24,7 @@
 | 工作流 | 所在分支 | 说明 | 触发方式 |
 |---|---|---|---|
 | `build-ax3000t-immortalwrt.yml` | MT7981 / master | 编译小米 AX3000T 固件（源码 hanwckf `openwrt-21.02`；standard / stock / AN8855 变体按配置勾选） | 手动触发 (`workflow_dispatch`) |
-| `build-rax3000m-immortalwrt.yml` | MT7981 / master | 编译 CMCC RAX3000M 固件（源码官方 v24.10.6，`mediatek/filogic` 子目标；SPI-NAND / eMMC 同一 profile 产出） | 手动触发 (`workflow_dispatch`) |
+| `build-rax3000m-immortalwrt.yml` | MT7981 / master | 编译 CMCC RAX3000M 固件（源码官方 v24.10.6，`mediatek/filogic` 子目标；同一 profile 也产出 eMMC 引导件，收集时排除，Release 只放 SPI-NAND 四件） | 手动触发 (`workflow_dispatch`) |
 | `build-mt7981-u-boot.yml` | MT7981 / master | 并行编译 MT7981 平台所有板型变体的 U-Boot 引导加载器 | 手动触发 (`workflow_dispatch`) |
 | `build-an7581-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫固件 (XGS-PON)，源码分支 `REPO_BRANCH=master` | 手动触发 (`workflow_dispatch`) |
 | `build-an7581-gpon-immortalwrt.yml` | AN7581 / master | 编译 AN7581 平台光猫固件 (GPON)，源码分支 `REPO_BRANCH=AN7581-GPON` | 手动触发 (`workflow_dispatch`) |
@@ -98,7 +98,7 @@
 | 设备 | 配置标识符 | 变体 |
 |---|---|---|
 | 小米 AX3000T | `xiaomi_mi-router-ax3000t` | 标准版、stock 版、AN8855 版、AN8855-stock 版 |
-| CMCC RAX3000M | `cmcc_rax3000m` | 官方 24.10 仅此一个 profile，SPI-NAND 与 eMMC 两套 preloader/fip（含 `-emmc-gpt.bin`）同批产出 |
+| CMCC RAX3000M | `cmcc_rax3000m` | 官方 24.10 仅此一个 profile，SPI-NAND 与 eMMC 两套 preloader/fip（含 `-emmc-gpt.bin`）同批产出，但本机型是 SPI-NAND，eMMC 三件套在收集步骤按 `*emmc*` 排除，Release 只放 sysupgrade/recovery 两个 itb 加 `-nand-preloader.bin`/`-nand-bl31-uboot.fip` |
 
 ### MT7981 平台 - U-Boot
 
@@ -132,7 +132,7 @@
 
 | 文件 | 用途 |
 |---|---|
-| `an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`（均在 `AN7581` 分支根目录）、`ax3000t.config` / `rax3000m.config`（在 `MT7981` 分支根目录） | 按设备型号命名的 OpenWrt menuconfig 配置，master 不存放配置文件 — 定义目标设备、内核选项、软件包；`ax3000t.config` 面向 hanwckf 21.02 的 `mediatek/mt7981`，`rax3000m.config` 面向官方 v24.10.6 的 `mediatek/filogic`，两份配置的 target 符号与软件包段互不通用；工作流复制成 `openwrt/.config` 并无条件追加 `CONFIG_CCACHE=y`（`dl/` 与 `.ccache` 两层缓存默认启用；五份固件编译工作流各带 `clean_dl_cache` / `clean_ccache` 两个清理开关，默认不勾）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`，`an7581-` / `an7581-gpon-` / `an7583-gpon-` / `ax3000t-` / `rax3000m-` 五组前缀互不为前缀，同一分支上的多份工作流才不会恢复到彼此的缓存；改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里 `hashFiles` 的字面文件名（该参数不接受变量）；勾选清理开关时对应的 `Clear ... cache` 步骤排在同层 `Cache ...` 之前，删掉本设备前缀的条目后本趟全量下载/重编、收尾重存（一趟即恢复热度），并有删净断言，没删净直接失败 |
+| `an7581.config` / `an7581-gpon.config` / `an7583-gpon.config`（均在 `AN7581` 分支根目录）、`ax3000t.config` / `rax3000m.config`（在 `MT7981` 分支根目录） | 按设备型号命名的 OpenWrt menuconfig 配置，master 不存放配置文件 — 定义目标设备、内核选项、软件包；`ax3000t.config` 面向 hanwckf 21.02 的 `mediatek/mt7981`，`rax3000m.config` 面向官方 v24.10.6 的 `mediatek/filogic`，两份配置的 target 符号与软件包段互不通用；工作流复制成 `openwrt/.config` 并无条件追加 `CONFIG_CCACHE=y`（`dl/` 与 `.ccache` 两层缓存默认启用；五份固件编译工作流各带 `clean_dl_cache` / `clean_ccache` 两个清理开关，默认不勾）；缓存 key 的前缀取自工作流 env 的 `CONFIG_NAME`，`an7581-` / `an7581-gpon-` / `an7583-gpon-` / `ax3000t-` / `rax3000m-` 五组前缀互不为前缀，同一分支上的多份工作流才不会恢复到彼此的缓存；改设备名要同步 `CONFIG_FILE`、`CONFIG_NAME` 和 key 里 `hashFiles` 的字面文件名（该参数不接受变量）；勾选清理开关时对应的 `Clear ... cache` 步骤排在同层 `Cache ...` 之前，删掉本设备前缀的条目后本趟全量下载/重编、收尾重存（一趟即恢复热度），并有删净断言，没删净直接失败；`rax3000m.config` 另显式关闭 7 个 `trusted-firmware-a-mt79xx-ram-*`（上游 `include/trusted-firmware-a.mk` 给了 `DEFAULT:=TARGET_mediatek_filogic`，勾 filogic 就默认全选，各自只往 BIN_DIR 丢一个 UART 救砖 `mt79xx-ram-*-bl2.bin`，关掉省 7 次 TFA 交叉编译；`*-spim-nand-ddr4` 等隐藏变体不能关，镜像构建要用它们的 staging 产物） |
 | `add-feed-sources.sh` | feeds 更新**前**执行的钩子脚本 — 增删第三方软件源（改 `feeds.conf.default`）。feed 名只能用字母、数字、下划线，带连字符会让 `feeds update` 报语法错误 |
 | `clone-packages.sh` | feeds 安装**后**、`make defconfig` **前**执行的钩子脚本 — clone 非 feed 格式的第三方包到 `package/<包名>/`。位置是硬约束：提前 clone 时 `+luci-base` 这类 feed 依赖解析不了，`make defconfig` 会静默跳过整包（编译不报错，见提交 `77684b6`）。AN7581 分支预置 `luci-app-lucky` + `luci-app-airoha-npu`，MT7981 分支只有 `luci-app-lucky` |
 | `set-firmware-defaults.sh` | `make defconfig` **后**、编译**前**执行的钩子脚本 — 用 `sed` 改源码树里会被装进 rootfs 的文件，即固件的出厂默认值（恢复出厂和 `sysupgrade -n` 后仍是这里的值）。AN758x 三个编译目标共用一份，改动对三份产出同时生效；MT7981 分支把默认 LAN IP 改成 `10.0.0.1`，AN7581 分支该行保持注释 |
@@ -143,7 +143,7 @@
 
 - AX3000T（hanwckf 分支）与 AN758x：[hanwckf ImmortalWrt MT798x 编译说明](https://cmi.hanwckf.top/p/immortalwrt-mt798x/)
 - RAX3000M（官方仓库）：源码为 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 的 `v24.10.6` 标签，
-  设备定义在 `target/linux/mediatek/image/filogic.mk`，U-Boot 与 preloader/fip 由源码 `package/boot/uboot-mediatek` 一起构建
+  设备定义在 `target/linux/mediatek/image/filogic.mk`，U-Boot 与 preloader/fip 由源码 `package/boot/uboot-mediatek` 一起构建；固件工作流的整理步骤按 `*cmcc_rax3000m-*` 收本 profile 的文件并排除 `*emmc*`，最终 4 件，数量不符直接失败
 
 ## 许可证
 
