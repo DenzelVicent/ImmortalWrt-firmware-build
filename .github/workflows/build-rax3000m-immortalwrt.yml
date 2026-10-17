@@ -105,6 +105,12 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /srcdir/openwrt $GITHUB_WORKSPACE/openwrt
+        # 版本号取 openwrt/include/version.mk 里 VERSION_NUMBER 的兜底字面量，供产物名与 Release 标签使用
+        raw="$(grep -m1 -F 'VERSION_NUMBER:=$(if ' openwrt/include/version.mk)"
+        ver="${raw%)}"
+        ver="${ver##*,}"
+        [ -n "$ver" ] || { echo "::error::没能从 openwrt/include/version.mk 解析出 VERSION_NUMBER"; exit 1; }
+        echo "FW_VERSION=$ver" >> $GITHUB_ENV
 
     # ----------------------------------------------------------
     # 步骤 5: 缓存 dl/（源码包）与 openwrt/.ccache（编译对象），两层默认启用
@@ -287,7 +293,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: ImmortalWrt_firmware_cmcc_rax3000m${{ env.FILE_DATE }}
+        name: ImmortalWrt_${{ env.FW_VERSION }}_cmcc_rax3000m${{ env.FILE_DATE }}
         path: release/cmcc_rax3000m
 
   # ------------------------------------------------------------
@@ -314,7 +320,7 @@ jobs:
           path: artifacts
 
       # ----------------------------------------------------------
-      # 步骤 2: 把各型号散文件目录打包成 <型号>.tar.zst（型号名从 artifact 名反解）
+      # 步骤 2: 把各型号散文件目录打包成 <型号>.tar.zst（型号名从 artifact 名反解，约定见步骤 3）
       # ----------------------------------------------------------
       - name: Package firmware by device
         run: |
@@ -322,21 +328,25 @@ jobs:
           for d in artifacts/*/; do
             [ -d "$d" ] || continue
             name="$(basename "$d")"
-            model="$(echo "$name" | sed -E 's/^ImmortalWrt_firmware_//; s/_[0-9]{12}$//')"
+            model="$(echo "$name" | sed -E 's/^ImmortalWrt_[^_]*_//; s/_[0-9]{12}$//')"
             tar --zstd -cf "release/${model}.tar.zst" -C "$d" .
             echo "Packaged $model -> release/${model}.tar.zst"
           done
           ls -l release/
 
       # ----------------------------------------------------------
-      # 步骤 3: 生成 Release 标签 ImmortalWrt_<型号>_年.月.日-时分 与说明
+      # 步骤 3: 从 artifact 名回取版本号，生成 Release 标签 ImmortalWrt_<型号>_<版本>_年.月.日-时分 与说明
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
         run: |
-          echo "release_tag=ImmortalWrt_RAX3000M_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          # build job 的 env 不跨 job，版本号从本次 run 的 artifact 名回取（约定 ImmortalWrt_<版本>_<型号>_<12位时间>）
+          first="$(ls -1 artifacts | head -1)"
+          [[ "$first" =~ ^ImmortalWrt_([0-9A-Za-z.-]+)_.+_[0-9]{12}$ ]] || { echo "::error::artifact 名不符合命名约定: $first"; exit 1; }
+          fw="${BASH_REMATCH[1]}"
+          echo "release_tag=ImmortalWrt_RAX3000M_${fw}_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "ImmortalWrt 24.10.6 for CMCC RAX3000M (MT7981 / mediatek-filogic，官方 immortalwrt/immortalwrt 仓库)" >> release.txt
+          echo "ImmortalWrt ${fw} for CMCC RAX3000M (MT7981 / mediatek-filogic，官方 immortalwrt/immortalwrt 仓库)" >> release.txt
           echo "" >> release.txt
           echo "本机型是 SPI-NAND，Release 只放 4 件（同 profile 的 eMMC 三件套已在收集步骤排除）：" >> release.txt
           echo "- cmcc_rax3000m-squashfs-sysupgrade.itb（sysupgrade，UBI 根文件系统）" >> release.txt
