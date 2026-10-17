@@ -25,6 +25,11 @@ on:
         description: 先清空 ccache 编译对象缓存再编译（怀疑产物不对、需排除 ccache 时勾选）
         type: boolean
         default: false
+      # Release 发布开关：默认关闭，只上传 artifact，不创建 GitHub Release、不清理旧 runs/Releases。
+      release:
+        description: 编译成功后创建 GitHub Release（默认关闭，关闭时只保留 artifact）
+        type: boolean
+        default: false
 
 env:
   # 源码仓库地址
@@ -319,12 +324,13 @@ jobs:
 
   # ------------------------------------------------------------
   # Release 发布 job：编译成功后打包上传 Release，并清理旧 runs / Releases
+  # 由 workflow_dispatch 的 release 开关控制，默认关闭；关闭时只保留 artifact
   # ------------------------------------------------------------
   release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: build
-    if: needs.build.result == 'success' && !cancelled()
+    if: needs.build.result == 'success' && !cancelled() && inputs.release
 
     permissions:
       contents: write   # 允许创建 Release
