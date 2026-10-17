@@ -298,7 +298,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: ImmortalWrt_${{ env.FW_VERSION }}_cmcc_rax3000m${{ env.FILE_DATE }}
+        name: ImmortalWrt_${{ env.FW_VERSION }}_RAX3000M${{ env.FILE_DATE }}
         path: release/cmcc_rax3000m
 
   # ------------------------------------------------------------
@@ -341,16 +341,17 @@ jobs:
           ls -l release/
 
       # ----------------------------------------------------------
-      # 步骤 3: 从 artifact 名回取版本号，生成 Release 标签 ImmortalWrt_<型号>_<版本>_<年-月-日-时-分> 与说明
+      # 步骤 3: 版本号与时间戳从 artifact 名回取，Release 标签与 artifact 名一致
       # ----------------------------------------------------------
       - name: Generate release tag
         id: tag
         run: |
           # build job 的 env 不跨 job，版本号从本次 run 的 artifact 名回取（约定 ImmortalWrt_<版本>_<型号>_<日期-时分>）
           first="$(ls -1 artifacts | head -1)"
-          [[ "$first" =~ ^ImmortalWrt_([0-9A-Za-z.-]+)_.+_[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]] || { echo "::error::artifact 名不符合命名约定: $first"; exit 1; }
+          [[ "$first" =~ ^ImmortalWrt_([0-9A-Za-z.-]+)_(.+)_([0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2})$ ]] || { echo "::error::artifact 名不符合命名约定: $first"; exit 1; }
           fw="${BASH_REMATCH[1]}"
-          echo "release_tag=ImmortalWrt_RAX3000M_${fw}_$(date +"%Y-%m-%d-%H-%M")" >> $GITHUB_OUTPUT
+          ts="${BASH_REMATCH[3]}"
+          echo "release_tag=ImmortalWrt_${fw}_RAX3000M_${ts}" >> $GITHUB_OUTPUT
           touch release.txt
           echo "ImmortalWrt ${fw} for CMCC RAX3000M (MT7981 / mediatek-filogic，官方 immortalwrt/immortalwrt 仓库)" >> release.txt
           echo "" >> release.txt
@@ -386,13 +387,14 @@ jobs:
           keep_minimum_runs: 3
 
       # ----------------------------------------------------------
-      # 步骤 6: 清理旧 Release（保留最近 3 个，连 tag 一起删）
+      # 步骤 6: 清理旧 Release（本设备标签保留最近 3 个，连 tag 一起删）
       # ----------------------------------------------------------
       - name: Remove old Releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: steps.release.outputs.status == 'success' && !cancelled()
+        if: steps.release.outcome == 'success' && !cancelled()
         with:
           keep_latest: 3
           delete_tags: true
+          delete_tag_pattern: _RAX3000M_
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
