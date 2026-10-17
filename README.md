@@ -97,7 +97,7 @@
 
 | 设备 | 配置标识符 | 变体 |
 |---|---|---|
-| 小米 AX3000T | `xiaomi_mi-router-ax3000t` | 标准版、stock 版、AN8855 版、AN8855-stock 版 |
+| 小米 AX3000T | `xiaomi_mi-router-ax3000t` | 标准版、stock 版、AN8855 版、AN8855-stock 版；配置标识符保持上游原名，收集步骤把产物名里的 `mi-router-` 段去掉，出 `xiaomi_ax3000t`（勾了 AN8855 变体再多一个 `xiaomi_ax3000t-an8855`），两变体分目录各自打包 |
 | CMCC RAX3000M | `cmcc_rax3000m` | 官方 24.10 仅此一个 profile，SPI-NAND 与 eMMC 两套 preloader/fip（含 `-emmc-gpt.bin`）同批产出，但本机型是 SPI-NAND，eMMC 三件套在收集步骤按 `*emmc*` 排除，Release 只放 sysupgrade/recovery 两个 itb 加 `-nand-preloader.bin`/`-nand-bl31-uboot.fip` |
 
 ### MT7981 平台 - U-Boot
