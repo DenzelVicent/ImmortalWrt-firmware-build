@@ -269,6 +269,7 @@ jobs:
     # 步骤 13: 整理固件文件
     # 删除 packages 子目录和 manifest/buildinfo/校验和等附属文件，只留可刷写镜像
     # 按型号分目录存到 release/<型号>/：型号 = profile 去掉 -stock 后缀，同一硬件的变体同目录
+    # 目录名与包内文件名一并去掉上游的 mi-router- 段（xiaomi_ax3000t[-an8855]），只改名字，镜像内的支持设备串不变
     # ----------------------------------------------------------
     - name: Organize firmware files
       id: organize
@@ -286,28 +287,35 @@ jobs:
           prof="${prof%-squashfs-sysupgrade.bin}"
           prof="${prof%-squashfs-factory.bin}"
           model="${prof%-stock}"
+          # 产物名统一去掉上游的 mi-router- 段，f 保持 BIN_DIR 原名，dst 才是改短后的文件名
+          dst="${f/xiaomi_mi-router-/xiaomi_}"
+          model="${model/xiaomi_mi-router-/xiaomi_}"
           mkdir -p "$GITHUB_WORKSPACE/release/$model"
-          mv "$f" "$GITHUB_WORKSPACE/release/$model/"
+          mv "$f" "$GITHUB_WORKSPACE/release/$model/$dst"
         done
+        # 没替换成功说明 profile 名与规则不匹配，宁可失败也不悄悄退回旧名
+        if find "$GITHUB_WORKSPACE/release" -maxdepth 1 -type d -name '*mi-router*' | grep -q .; then
+          echo "::error::型号目录名仍含 mi-router 段"; exit 1;
+        fi
         echo "status=success" >> $GITHUB_OUTPUT
 
     # ----------------------------------------------------------
     # 步骤 14: 按型号上传散文件目录为 artifact（tar.zst 打包由 release job 执行）
     # 型号目录不存在（ax3000t.config 未勾选该变体）时 hashFiles 为空，跳过对应上传
     # ----------------------------------------------------------
-    - name: Upload firmware xiaomi_mi-router-ax3000t
+    - name: Upload firmware xiaomi_ax3000t
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t/*') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_ax3000t/*') != '' && !cancelled()
       with:
-        name: ImmortalWrt_${{ env.FW_VERSION }}_xiaomi_mi-router-ax3000t${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t
+        name: ImmortalWrt_${{ env.FW_VERSION }}_xiaomi_ax3000t${{ env.FILE_DATE }}
+        path: release/xiaomi_ax3000t
 
-    - name: Upload firmware xiaomi_mi-router-ax3000t-an8855
+    - name: Upload firmware xiaomi_ax3000t-an8855
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_mi-router-ax3000t-an8855/*') != '' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && hashFiles('release/xiaomi_ax3000t-an8855/*') != '' && !cancelled()
       with:
-        name: ImmortalWrt_${{ env.FW_VERSION }}_xiaomi_mi-router-ax3000t-an8855${{ env.FILE_DATE }}
-        path: release/xiaomi_mi-router-ax3000t-an8855
+        name: ImmortalWrt_${{ env.FW_VERSION }}_xiaomi_ax3000t-an8855${{ env.FILE_DATE }}
+        path: release/xiaomi_ax3000t-an8855
 
   # ------------------------------------------------------------
   # Release 发布 job：编译成功后打包上传 Release，并清理旧 runs / Releases
